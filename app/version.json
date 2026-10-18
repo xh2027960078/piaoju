@@ -1,8 +1,8 @@
 {
-    "versionCode":  22,
-    "versionName":  "1.1.19",
-    "url":  "piaoju-1.1.19.apk",
-    "size":  1089587,
-    "notes":  "1. 网页版版本号改为从页面读取，刷新即为最新\n2. 后台与设置页版本号同步显示",
+    "versionCode":  27,
+    "versionName":  "1.1.24",
+    "url":  "piaoju-1.1.24.apk",
+    "size":  1097857,
+    "notes":  "1. 网页版移除娱乐页签与游戏代码，仅 App 保留\n2. 包体积略减",
     "force":  false
 }

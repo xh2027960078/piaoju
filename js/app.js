@@ -159,6 +159,8 @@ function maybeShowWeChatTip() {
 
 async function init() {
   setRerender(render);
+  // 网页版隐藏仅 App 可用的页签（内联脚本之外再兜底一次）
+  document.documentElement.classList.toggle('no-native', !window.Android);
   window.__syncBack = syncBackFlag;
   backBtn.addEventListener('click', goBack);
   document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
@@ -217,7 +219,20 @@ async function init() {
 
   // 原生壳里资源都在本地，不需要 Service Worker 缓存（也避免更新后读到旧脚本）
   if (!window.Android && 'serviceWorker' in navigator && location.protocol.startsWith('http')) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => {
+      // 每次打开都主动检查一次新版本（跳过 HTTP 缓存）
+      reg.update().catch(() => {});
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update().catch(() => {});
+      });
+      // 新版本接管后自动刷新一次，用户不用手动强刷
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloaded) return;
+        reloaded = true;
+        location.reload();
+      });
+    }).catch(() => {});
   }
 }
 

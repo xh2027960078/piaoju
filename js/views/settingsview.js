@@ -23,6 +23,22 @@ const PROFILE_FIELDS = [
   { key: 'causa', label: '事由', type: 'text', placeholder: '默认「出差」' },
 ];
 
+function lastBackupText() {
+  const t = Number((state.settings && state.settings.lastBackupAt) || 0);
+  if (!t) return '从未备份';
+  const days = Math.floor((Date.now() - t) / 86400000);
+  if (days <= 0) return '今天';
+  if (days === 1) return '昨天';
+  return days + ' 天前';
+}
+
+function backupHint() {
+  const t = Number((state.settings && state.settings.lastBackupAt) || 0);
+  const days = t ? (Date.now() - t) / 86400000 : 999;
+  if (days <= 7) return '';
+  return '<p class="hint" style="margin-top:8px">建议每周备份一次：备份包可存到电脑或网盘，换设备 / 换浏览器时用「恢复」导入。刷新页面、更新版本都不会影响已录入的数据。</p>';
+}
+
 export async function renderSettings(root) {
   const s = state.settings;
   const usage = await repo.usage();
@@ -93,12 +109,14 @@ export async function renderSettings(root) {
     <div class="card">
       <div class="kv"><span class="k">周期 / 文件</span><span class="v">${state.periods.length} 个 / ${fileCount} 个</span></div>
       <div class="kv"><span class="k">占用空间</span><span class="v">${usage && usage.usage ? fmtBytes(usage.usage) : '—'}${usage && usage.quota ? ` / ${fmtBytes(usage.quota)}` : ''}</span></div>
+      <div class="kv"><span class="k">上次备份</span><span class="v">${lastBackupText()}</span></div>
       <div class="btn-row">
         <button class="btn soft" data-a="backup">${icon('download')}备份</button>
         <button class="btn ghost" data-a="restore">${icon('upload')}恢复</button>
       </div>
       ${isWeChat ? '<p class="hint" style="margin-top:10px">微信内使用时，数据保存在微信浏览器缓存中；清理微信缓存或卸载微信会丢失，建议每周备份一次，并在浏览器里导出备份包。</p>' : ''}
       <button class="btn danger block mt12" data-a="wipe">${icon('trash')}清空全部数据</button>
+      ${backupHint()}
     </div>
 
     <div class="section-title"><span>隐私</span></div>
@@ -267,7 +285,7 @@ async function backup() {
   const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 5 } });
   const name = `票据管家备份_${new Date().toISOString().slice(0, 10)}.zip`;
   const res = await saveBlob(blob, name);
-  if (res.ok) { toast('备份已导出', 'ok'); track('backup'); }
+  if (res.ok) { toast('备份已导出', 'ok'); track('backup'); saveSettings({ lastBackupAt: Date.now() }); }
   else if (!res.wechat) toast('备份失败：' + (res.error || ''), 'err');
 }
 

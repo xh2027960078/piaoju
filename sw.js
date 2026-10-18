@@ -1,5 +1,5 @@
 /* 离线缓存：应用外壳走本地缓存；配置文件始终走网络 */
-const CACHE = 'piaoju-v10';
+const CACHE = 'piaoju-v16';
 const ASSETS = [
   './',
   './index.html',
