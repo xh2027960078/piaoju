@@ -129,6 +129,25 @@ async function createRelease({ code, name, url, size, notes }) {
 }
 
 /* ---------------- 聚合 ---------------- */
+/* 游戏时长排行（按累计秒数） */
+function gameRank(map) {
+  const GAME_NAME = { mine: '扫雷', g2048: '2048' };
+  const rows = [...(map || new Map()).entries()]
+    .sort((x, y) => y[1].seconds - x[1].seconds)
+    .map(([k, v]) => [GAME_NAME[k] || k, v]);
+  if (!rows.length) return '<div class="a-muted">还没有游戏记录（只有 App 端会统计）</div>';
+  const max = Math.max(1, ...rows.map(([, v]) => v.seconds));
+  return rows.map(([name, v]) => {
+    const label = v.seconds < 60 ? v.seconds + ' 秒' : Math.round(v.seconds / 60) + ' 分钟';
+    return `
+      <div class="a-rank-row">
+        <span class="a-rank-name">${esc(name)}</span>
+        <span class="a-rank-track"><i style="width:${Math.max(3, Math.round((v.seconds / max) * 100))}%"></i></span>
+        <span class="a-rank-val">${esc(label)}</span>
+      </div>
+      <div class="a-muted" style="font-size:11px;margin:-4px 0 4px 106px">${v.plays} 次游玩</div>`;
+  }).join('');
+}
 function aggregate(events) {
   const now = new Date();
   const today = dayKey(now);
@@ -144,6 +163,7 @@ function aggregate(events) {
   }
   const dayMap = new Map(days.map((d) => [d.key, d]));
 
+  const byGame = new Map();
   let todayDevices = new Set();
   let weekDevices = new Set();
 
@@ -158,6 +178,13 @@ function aggregate(events) {
     devices.set(dev, rec);
 
     byEvent.set(e.event, (byEvent.get(e.event) || 0) + 1);
+    if (e.event === 'game_play') {
+      const g = (e.props && e.props.game) || 'other';
+      const cur = byGame.get(g) || { seconds: 0, plays: 0 };
+      cur.seconds += Number((e.props && e.props.seconds) || 0);
+      cur.plays += 1;
+      byGame.set(g, cur);
+    }
     byPlatform.set(e.platform || '-', (byPlatform.get(e.platform || '-') || 0) + 1);
     byVersion.set(e.app_version || '-', (byVersion.get(e.app_version || '-') || 0) + 1);
 
@@ -174,6 +201,7 @@ function aggregate(events) {
     byPlatform: sortMap(byPlatform),
     byVersion: sortMap(byVersion),
     days,
+    byGame,
     todayCount: todayDevices.size,
     weekCount: weekDevices.size,
     total: events.length,
@@ -309,6 +337,11 @@ function renderDashboard() {
     </div>
 
     <div class="a-card">
+      <h3>游戏时长<span>仅 App 端 · 累计游玩时间</span></h3>
+      <div class="a-rank">${gameRank(a.byGame)}</div>
+    </div>
+
+    <div class="a-card">
       <h3>设备明细<span>点一行展开该设备的操作记录 · 最新 ${a.devices.length} 台</span></h3>
       <div class="a-scroll">
         <table class="a-table">
@@ -366,6 +399,26 @@ function releaseCardHtml() {
 function wireRelease() {
   const relGo = main.querySelector('#relGo');
   if (relGo) relGo.addEventListener('click', () => publishFromForm());
+  hydrateVersionDefaults();
+}
+
+/* 没有发布记录时，用线上 version.json 推算下一个 versionCode */
+async function hydrateVersionDefaults() {
+  if (state.releases && state.releases.length) return;
+  try {
+    const url = new URL('app/version.json', location.href).href;
+    const res = await fetch(url + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const info = await res.json();
+    const codeEl = main.querySelector('#relCode');
+    const nameEl = main.querySelector('#relName');
+    if (codeEl && codeEl.value === '1' && Number(info.versionCode) > 0) {
+      codeEl.value = String(Number(info.versionCode) + 1);
+    }
+    if (nameEl && !nameEl.value && info.versionName) {
+      nameEl.value = bumpVersionName(info.versionName);
+    }
+  } catch (e) { /* ignore */ }
 }
 
 async function publishFromForm() {

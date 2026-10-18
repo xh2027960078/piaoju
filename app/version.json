@@ -1,8 +1,8 @@
 {
-    "versionCode":  27,
-    "versionName":  "1.1.24",
-    "url":  "piaoju-1.1.24.apk",
+    "versionCode":  28,
+    "versionName":  "1.1.25",
+    "url":  "piaoju-1.1.25.apk",
     "size":  1097857,
-    "notes":  "1. 网页版移除娱乐页签与游戏代码，仅 App 保留\n2. 包体积略减",
+    "notes":  "1. 扫雷 / 2048 新增成就系统与音效\n2. 游玩时长计入管理后台\n3. 网页版仍不含游戏功能",
     "force":  false
 }
