@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no, interactive-widget=resizes-content" />
+<meta name="format-detection" content="telephone=no,email=no,address=no" />
+<meta name="theme-color" content="#2f6bff" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<title>票据管家</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+<div class="bg" id="bg"></div>
+<div id="app">
+  <header class="topbar" id="topbar">
+    <button class="icon-btn back-btn" id="backBtn" hidden aria-label="返回">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>
+    </button>
+    <div class="topbar-main">
+      <h1 id="pageTitle">周期</h1>
+      <p id="pageSub" class="page-sub"></p>
+    </div>
+    <div class="topbar-actions" id="topActions"></div>
+  </header>
+
+  <main id="view" class="view"></main>
+
+  <nav class="tabbar" id="tabbar">
+    <button class="tab is-active" data-tab="periods">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v2M17 3v2M4 8h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/></svg>
+      <span>周期</span>
+    </button>
+    <button class="tab" data-tab="charts">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+      <span>图表</span>
+    </button>
+    <button class="tab" data-tab="export">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+      <span>导出</span>
+    </button>
+    <button class="tab" data-tab="settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.11a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.11A1.7 1.7 0 0 0 4.6 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 8.96 4.6H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.11a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.11a1.7 1.7 0 0 0-1.49 1Z"/></svg>
+      <span>设置</span>
+    </button>
+  </nav>
+
+  <div id="layer" class="layer"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <input id="filePicker" type="file" class="hidden-input" multiple />
+  <input id="photoPicker" type="file" class="hidden-input" accept="image/*" capture="environment" />
+</div>
+
+<script src="vendor/jszip.min.js"></script>
+<script src="js/data/options.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
