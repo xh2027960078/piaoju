@@ -434,7 +434,7 @@ async function refresh() {
 }
 
 function boot() {
-  const ver = (window.APP_CONFIG || {}).version || '';
+  const ver = window.__BUILD || (window.APP_CONFIG || {}).version || '';
   const verEl = document.getElementById('aVer');
   if (verEl) verEl.textContent = ver ? 'v' + ver : '';
   const buildEl = document.getElementById('aBuild');

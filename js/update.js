@@ -12,7 +12,7 @@ export function currentVersion() {
       return { name: parts[0] || '', code: Number(parts[1]) || 0 };
     }
   } catch (e) { /* ignore */ }
-  return { name: (window.APP_CONFIG || {}).version || '', code: 0 };
+  return { name: window.__BUILD || (window.APP_CONFIG || {}).version || '', code: 0 };
 }
 
 function resolveUrl(base, rel) {

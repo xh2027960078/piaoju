@@ -1,8 +1,8 @@
 {
-    "versionCode":  21,
-    "versionName":  "1.1.18",
-    "url":  "piaoju-1.1.18.apk",
+    "versionCode":  22,
+    "versionName":  "1.1.19",
+    "url":  "piaoju-1.1.19.apk",
     "size":  1089587,
-    "notes":  "1. 后台统计的事件名、平台名改为中文\n2. 后台标题旁显示当前版本号",
+    "notes":  "1. 网页版版本号改为从页面读取，刷新即为最新\n2. 后台与设置页版本号同步显示",
     "force":  false
 }
