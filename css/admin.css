@@ -183,3 +183,14 @@ button:disabled { opacity: .5; cursor: default; }
   pointer-events: none;
   font-family: ui-monospace, Consolas, monospace;
 }
+.a-rel-del {
+  height: 24px;
+  width: 24px;
+  padding: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #9aa4b8;
+  font-size: 12px;
+  line-height: 1;
+}
+.a-rel-del:hover { background: var(--danger-soft, #ffecea); color: var(--danger, #f0453a); }

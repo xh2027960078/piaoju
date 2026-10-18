@@ -114,6 +114,28 @@ function uploadApk(file, name, onProgress) {
   });
 }
 
+/* 读取 APK 内部版本（APK 是 zip，里面的 assets/www/js/config.js 有 version） */
+async function apkInternalVersion(file) {
+  try {
+    if (!window.JSZip) return null;
+    const zip = await window.JSZip.loadAsync(file);
+    const entry = zip.file('assets/www/js/config.js') || (zip.file(/assets\/www\/js\/config\.js$/) || [])[0];
+    if (!entry) return null;
+    const txt = await entry.async('string');
+    const m = txt.match(/version:\s*['"]([^'"]+)['"]/);
+    return m ? m[1] : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function deleteRelease(id) {
+  const res = await fetch(`${cfg.supabaseUrl}/rest/v1/releases?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: { apikey: cfg.supabaseAnonKey, Authorization: `Bearer ${token()}`, Prefer: 'return=minimal' },
+  });
+  if (!res.ok) throw new Error(`删除失败（${res.status}）`);
+}
 async function createRelease({ code, name, url, size, notes }) {
   const res = await fetch(`${cfg.supabaseUrl}/rest/v1/releases`, {
     method: 'POST',
@@ -375,12 +397,14 @@ function releaseCardHtml() {
       <span class="a-muted">${r.size ? (r.size / 1024 / 1024).toFixed(1) + ' MB' : ''}</span>
       <span class="a-muted">${fmtTime(r.created_at)}</span>
       <a href="${esc(r.url)}" target="_blank" rel="noopener">下载</a>
+      <button class="a-rel-del" data-del="${r.id}" title="删除这条记录">✕</button>
     </div>`).join('') || '<div class="a-muted">还没有发布记录</div>';
   return `
     <div class="a-card" id="releaseCard">
       <h3>发布新版本<span>选择 APK 上传，已安装的 App 打开时会收到更新提示</span></h3>
       <div class="a-rel">
         <input type="file" id="relFile" accept=".apk,application/vnd.android.package-archive" />
+        <div class="a-muted" id="relApkInfo" style="font-size:12px"></div>
         <div class="a-rel-row">
           <label>versionCode <input id="relCode" type="number" min="1" value="${nextCode}" /></label>
           <label>版本名 <input id="relName" type="text" value="${nextName}" /></label>
@@ -399,6 +423,37 @@ function releaseCardHtml() {
 function wireRelease() {
   const relGo = main.querySelector('#relGo');
   if (relGo) relGo.addEventListener('click', () => publishFromForm());
+  const fileEl = main.querySelector('#relFile');
+  if (fileEl) {
+    fileEl.addEventListener('change', async () => {
+      const info = main.querySelector('#relApkInfo');
+      const f = fileEl.files && fileEl.files[0];
+      fileEl.dataset.apkVersion = '';
+      if (!f) { if (info) info.textContent = ''; return; }
+      if (info) { info.textContent = '正在读取 APK 版本…'; info.style.color = ''; }
+      const v = await apkInternalVersion(f);
+      fileEl.dataset.apkVersion = v || '';
+      if (info) {
+        if (v) {
+          info.textContent = '检测到 APK 内部版本：' + v + '（' + (f.size / 1024 / 1024).toFixed(2) + ' MB）';
+          info.style.color = '';
+        } else {
+          info.textContent = '无法识别版本，可能不是本项目打出的安装包';
+          info.style.color = 'var(--danger)';
+        }
+      }
+    });
+  }
+  main.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('删除这条发布记录？（已上传的 APK 文件不会删）')) return;
+    try {
+      await deleteRelease(b.dataset.del);
+      state.releases = await fetchReleases();
+      renderDashboard();
+    } catch (e) {
+      alert(e.message);
+    }
+  }));
   hydrateVersionDefaults();
 }
 
@@ -436,6 +491,9 @@ async function publishFromForm() {
   if (!file) { msg.textContent = '请先选择 APK 文件'; return; }
   if (!code || code < 1) { msg.textContent = 'versionCode 必须是正整数'; return; }
   if (!name) { msg.textContent = '请填写版本名'; return; }
+  const apkVer = fileEl.dataset.apkVersion || '';
+  if (!apkVer) { msg.textContent = '无法识别这个 APK 的内部版本，请确认选的是「票据管家-vX.apk」'; return; }
+  if (apkVer !== name) { msg.textContent = `APK 内部版本是 ${apkVer}，和填写的 ${name} 不一致，请检查文件`; return; }
 
   state.uploading = true;
   btn.disabled = true;
