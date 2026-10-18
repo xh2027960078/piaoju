@@ -10,6 +10,7 @@ import { pickFiles, saveBlob, toArrayBuffer } from '../platform.js';
 import { THEMES, CHART_TOGGLES, applyAppearance, readWallpaper } from '../appearance.js';
 import { isWeChat } from '../env.js';
 import { loadDefaultTemplate } from '../assets.js';
+import { checkForUpdate, currentVersion } from '../update.js';
 import { track, telemetryEnabled, setTelemetryEnabled, telemetryReady, telemetryHidden } from '../telemetry.js';
 
 const OPTIONS = window.OPTIONS || {};
@@ -114,7 +115,8 @@ export async function renderSettings(root) {
 
     <div class="section-title"><span>关于</span></div>
     <div class="card">
-      <div class="kv"><span class="k">应用</span><span class="v">票据管家 ${(window.APP_CONFIG && window.APP_CONFIG.version) || ""}</span></div>
+      <div class="kv"><span class="k">应用</span><span class="v">票据管家 ${currentVersion().name || ""}</span></div>
+      <div class="kv"><span class="k">版本更新</span><span class="v"><button class="btn small ghost" data-update>检查更新</button></span></div>
       <div class="kv"><span class="k">数据存储</span><span class="v">仅保存在本机</span></div>
       <p class="hint">所有票据、附件与报表都在手机本地处理，不会上传到任何服务器。</p>
     </div>`;
@@ -163,6 +165,9 @@ export async function renderSettings(root) {
       rerender();
     });
   }
+
+  const upBtn = root.querySelector('[data-update]');
+  if (upBtn) upBtn.addEventListener('click', () => checkForUpdate({ silent: false }));
 
   const wire = (a, fn) => { const el = root.querySelector(`[data-a="${a}"]`); if (el) el.addEventListener('click', fn); };
   wire('wp-pick', pickWallpaper);

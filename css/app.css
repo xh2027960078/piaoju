@@ -722,3 +722,17 @@ body.has-wallpaper .stat {
   display: flex; align-items: center; justify-content: center;
   color: var(--text-3); font-size: 12.5px;
 }
+/* 应用内更新进度条 */
+.update-bar {
+  height: 8px;
+  border-radius: 5px;
+  background: var(--card-soft, #eef2f9);
+  overflow: hidden;
+}
+.update-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: linear-gradient(90deg, #5b8cff, #2f6bff);
+  transition: width .2s ease;
+}

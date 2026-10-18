@@ -14,6 +14,7 @@ import { applyAppearance } from './appearance.js';
 import { isWeChat } from './env.js';
 import { loadDefaultTemplate } from './assets.js';
 import { track, initTelemetry } from './telemetry.js';
+import { maybeAutoCheck } from './update.js';
 import { inspectTemplate } from './xlsx.js';
 import { rowsForTemplate, buildZip, buildReimbursement } from './exporter.js';
 import { periodMenu } from './views/periods.js';
@@ -205,6 +206,7 @@ async function init() {
   if (isWeChat) maybeShowWeChatTip();
   initTelemetry();
   track('app_open');
+  maybeAutoCheck();
 
   // 调试/自动化入口（不影响正常使用）
   window.__app = {

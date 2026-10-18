@@ -16,15 +16,18 @@ export function loadPdfLib() {
   libPromise = new Promise((resolve, reject) => {
     const s = document.createElement('script');
     s.src = 'vendor/pdf.min.js';
+    const timer = setTimeout(() => reject(new Error('PDF 组件加载超时，请检查网络后重试')), 20000);
     s.onload = () => {
+      clearTimeout(timer);
+      if (!window.pdfjsLib) { reject(new Error('PDF 组件未初始化')); return; }
       try {
         window.pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('vendor/pdf.worker.min.js', location.href).href;
       } catch (e) { /* ignore */ }
       resolve(window.pdfjsLib);
     };
-    s.onerror = () => reject(new Error('PDF 组件加载失败'));
+    s.onerror = () => { clearTimeout(timer); reject(new Error('PDF 组件加载失败（vendor/pdf.min.js 可能没上传）')); };
     document.head.appendChild(s);
-  });
+  }).catch((err) => { libPromise = null; throw err; });
   return libPromise;
 }
 

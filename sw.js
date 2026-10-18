@@ -1,5 +1,5 @@
 /* 离线缓存：应用外壳走本地缓存；配置文件始终走网络 */
-const CACHE = 'piaoju-v6';
+const CACHE = 'piaoju-v7';
 const ASSETS = [
   './',
   './index.html',
@@ -54,6 +54,8 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   let path = '';
   try { path = new URL(req.url).pathname; } catch (err) { path = ''; }
+  // 更新包与版本清单不缓存
+  if (path.indexOf('/app/') >= 0) return;
   // 配置文件随时可能改（填 key）：始终优先网络，取不到再用缓存
   if (path.endsWith('/js/config.js')) {
     e.respondWith(

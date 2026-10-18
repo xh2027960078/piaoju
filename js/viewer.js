@@ -62,9 +62,32 @@ export async function openFileViewer(id, opts = {}) {
            <button class="btn ghost" data-x="share">转发</button>
            <button class="btn primary" data-x="save">导出</button>`,
     onMount(root, close) {
-      if (isPdf && buf) renderPdf(root, buf).catch((e) => {
+      const empty = !buf || (buf.byteLength === 0);
+      if (isPdf && empty) {
         const box = root.querySelector('#pdfBox');
-        if (box) box.innerHTML = `<div class="empty" style="padding:26px 0">${icon('doc')}<p>PDF 预览失败</p><p style="font-size:12px">${esc(e.message || '')}</p></div>`;
+        if (box) box.innerHTML = `<div class="empty" style="padding:22px 0">${icon('doc')}
+          <p>这张票据没有内容（0 字节）</p>
+          <p style="font-size:12px">导入时文件没读到，无法预览、识别和导出</p>
+          <p style="font-size:12px">请删除后重新导入；若来自微信文件，先保存到手机再导入</p></div>`;
+      }
+      if (isPdf && !empty) renderPdf(root, buf).catch((e) => {
+        const box = root.querySelector('#pdfBox');
+        if (!box) return;
+        const msg = esc((e && e.message) || '未知错误');
+        let fallback = '';
+        // 浏览器里退回到系统自带的 PDF 预览（安卓 WebView 不支持，APK 里跳过）
+        if (!window.Android) {
+          try {
+            const url = URL.createObjectURL(new Blob([buf], { type: 'application/pdf' }));
+            fallback = `<iframe src="${url}" style="width:100%;height:56vh;border:0;border-radius:14px;background:#fff" title="PDF"></iframe>`;
+          } catch (err) { fallback = ''; }
+        }
+        box.innerHTML = `${fallback}
+          <div class="empty" style="padding:14px 0 6px">${icon('doc')}
+            <p>内置渲染没成功</p>
+            <p style="font-size:12px">${msg}</p>
+            <p style="font-size:12px">可点下方「打开」用其他应用查看。</p>
+          </div>`;
       });
 
       root.querySelectorAll('[data-x]').forEach((b) => b.addEventListener('click', async () => {
@@ -114,19 +137,27 @@ async function renderPdf(root, buf) {
   if (doc.numPages > 1 && nav) nav.style.display = 'flex';
   if (pageLabel) pageLabel.textContent = `${pageNo} / ${doc.numPages}`;
 
+  let busy = false;
   const draw = async (n) => {
-    const page = await doc.getPage(n);
-    const base = page.getViewport({ scale: 1 });
-    const width = Math.min(box.clientWidth || 320, 900);
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const vp = page.getViewport({ scale: (width / base.width) * dpr });
-    canvas.width = Math.floor(vp.width);
-    canvas.height = Math.floor(vp.height);
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    await page.render({ canvasContext: ctx, viewport: vp }).promise;
-    if (pageLabel) pageLabel.textContent = `${n} / ${doc.numPages}`;
+    if (busy) return;          // 防止连点翻页导致同一 canvas 并发渲染报错
+    busy = true;
+    try {
+      const page = await doc.getPage(n);
+      const base = page.getViewport({ scale: 1 });
+      const width = Math.min(box.clientWidth || 320, 900);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const vp = page.getViewport({ scale: (width / base.width) * dpr });
+      canvas.width = Math.floor(vp.width);
+      canvas.height = Math.floor(vp.height);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      pageNo = n;
+      if (pageLabel) pageLabel.textContent = `${n} / ${doc.numPages}`;
+    } finally {
+      busy = false;
+    }
   };
 
   await draw(1);

@@ -447,6 +447,10 @@ export async function importFiles(periodId, kind, files, { onEach } = {}) {
       toast(`${file.name} 超过 40MB，已跳过`, 'err');
       continue;
     }
+    if (!file.size) {
+      toast(`${file.name || '文件'}：没读到内容（0 字节），已跳过；请先保存到手机再导入`, 'err');
+      continue;
+    }
     const thumb = await makeThumb(file, kind === 'invoice' ? 360 : 240);
     const meta = kind === 'invoice' ? {
       amount: 0,
@@ -456,6 +460,10 @@ export async function importFiles(periodId, kind, files, { onEach } = {}) {
       from: p ? (p.from || '') : '', to: p ? (p.to || '') : '', remark: '',
     } : { project: '', costItem: '', remark: '', amount: 0 };
     const buf = await toArrayBuffer(file);
+    if (!buf || buf.byteLength === 0) {
+      toast(`${file.name || '文件'}：读取失败（0 字节），已跳过`, 'err');
+      continue;
+    }
     const rec = await repo.addFile({
       periodId,
       kind,
