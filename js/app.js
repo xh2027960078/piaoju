@@ -12,6 +12,10 @@ import { setRerender } from './render.js';
 import { requestPersist } from './platform.js';
 import { applyAppearance } from './appearance.js';
 import { isWeChat } from './env.js';
+import { loadDefaultTemplate } from './assets.js';
+import { track, initTelemetry } from './telemetry.js';
+import { inspectTemplate } from './xlsx.js';
+import { rowsForTemplate, buildZip, buildReimbursement } from './exporter.js';
 import { periodMenu } from './views/periods.js';
 
 const TABS = {
@@ -185,11 +189,9 @@ async function init() {
   // 首次启动：写入内置模板
   if (!state.template) {
     try {
-      const res = await fetch('assets/template.xlsx');
-      const buf = await res.arrayBuffer();
+      const buf = await loadDefaultTemplate();
       await repo.set('template', { name: '金蝶员工报销表单（内置）', importedAt: Date.now(), data: buf });
       state.template = { name: '金蝶员工报销表单（内置）', data: buf };
-      const { inspectTemplate } = await import('./xlsx.js');
       state.templateInfo = { ...(await inspectTemplate(buf)), ok: true };
     } catch (e) {
       console.warn('内置模板加载失败', e);
@@ -200,13 +202,13 @@ async function init() {
   subscribe(() => render());
   render();
   if (isWeChat) maybeShowWeChatTip();
+  initTelemetry();
+  track('app_open');
 
   // 调试/自动化入口（不影响正常使用）
   window.__app = {
     state, repo, render, refresh,
-    rowsForTemplate: (...a) => import('./exporter.js').then((m) => m.rowsForTemplate(...a)),
-    buildZip: (...a) => import('./exporter.js').then((m) => m.buildZip(...a)),
-    buildReimbursement: (...a) => import('./exporter.js').then((m) => m.buildReimbursement(...a)),
+    rowsForTemplate, buildZip, buildReimbursement,
   };
 
 

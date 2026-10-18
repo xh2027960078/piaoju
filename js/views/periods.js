@@ -7,12 +7,14 @@ import { repo } from '../db.js';
 import { rerender } from '../render.js';
 import { buildZip } from '../exporter.js';
 import { saveBlob } from '../platform.js';
+import { track } from '../telemetry.js';
 
 export async function createPeriod() {
   const p = await openPeriodForm(null);
   if (!p) return;
   await repo.savePeriod(p);
   await refresh();
+  track('period_create');
   toast('周期已创建', 'ok');
 }
 

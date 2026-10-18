@@ -10,6 +10,7 @@ import { importFiles, openInvoiceForm, openAttachmentForm, openBatchMeta, detect
 import { takePhoto, pickFiles, saveBlob, shareBlob } from '../platform.js';
 import { singleFileName, safeName } from '../exporter.js';
 import { openFileViewer } from '../viewer.js';
+import { track } from '../telemetry.js';
 
 const KIND_LABEL = { image: '图片', pdf: 'PDF', other: '文件' };
 const KIND_ICON = { image: 'image', pdf: 'doc', other: 'file' };
@@ -196,6 +197,7 @@ async function addFilesInner(periodId, kind) {
   let added = await importFiles(periodId, kind, files);
   await refresh();
   if (!added.length) return;
+  track('file_import', { kind, count: added.length });
   rerender();
 
   // PDF 票据：后台识别金额（限时，失败不影响导入）

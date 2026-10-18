@@ -1,5 +1,5 @@
 /* 离线缓存：应用外壳优先走本地缓存 */
-const CACHE = 'piaoju-v4';
+const CACHE = 'piaoju-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -19,6 +19,9 @@ const ASSETS = [
   './js/naming.js',
   './js/pdftext.js',
   './js/appearance.js',
+  './js/config.js',
+  './js/telemetry.js',
+  './js/assets.js',
   './js/env.js',
   './js/viewer.js',
   './vendor/pdf.min.js',
@@ -31,6 +34,9 @@ const ASSETS = [
   './js/views/settingsview.js',
   './assets/template.xlsx',
   './manifest.webmanifest',
+  './admin.html',
+  './css/admin.css',
+  './js/admin.js',
 ];
 
 self.addEventListener('install', (e) => {

@@ -5,6 +5,7 @@ import { esc, icon, money, toast, sheet, confirmSheet } from '../ui.js';
 import { buildZip, buildReimbursement, rowsForTemplate, zipFileName, safeName } from '../exporter.js';
 import { saveBlob, shareBlob } from '../platform.js';
 import { rerender } from '../render.js';
+import { track } from '../telemetry.js';
 
 let sel = null;
 let zipName = '';
@@ -151,6 +152,7 @@ async function doZip(share) {
       onProgress: (done, total) => { if (done < total) toast(`正在打包 ${done}/${total}`); },
     });
     if (!count) { toast('所选周期没有可导出的文件', 'err'); return; }
+    track('export_zip', { count });
     const filename = `${root}.zip`;
     const res = share ? await shareBlob(blob, filename) : await saveBlob(blob, filename);
     handleResult(res, share, `已打包 ${count} 个文件`, filename, blob);
@@ -174,6 +176,7 @@ async function doXlsx(share) {
 
   toast('正在生成报销单…');
   try {
+    track('export_xlsx', { rows: rows.length });
     const { blob } = await buildReimbursement(ids);
     const filename = `${zipFileName()}_员工报销单.xlsx`;
     const res = share ? await shareBlob(blob, filename) : await saveBlob(blob, filename);

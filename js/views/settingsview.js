@@ -9,6 +9,8 @@ import { inspectTemplate } from '../xlsx.js';
 import { pickFiles, saveBlob, toArrayBuffer } from '../platform.js';
 import { THEMES, CHART_TOGGLES, applyAppearance, readWallpaper } from '../appearance.js';
 import { isWeChat } from '../env.js';
+import { loadDefaultTemplate } from '../assets.js';
+import { track, telemetryEnabled, setTelemetryEnabled, telemetryReady } from '../telemetry.js';
 
 const OPTIONS = window.OPTIONS || {};
 
@@ -98,6 +100,18 @@ export async function renderSettings(root) {
       <button class="btn danger block mt12" data-a="wipe">${icon('trash')}清空全部数据</button>
     </div>
 
+    <div class="section-title"><span>隐私</span></div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between;gap:12px;align-items:flex-start">
+        <div class="grow">
+          <div style="font-weight:600">匿名使用统计</div>
+          <div class="file-meta" style="margin-top:3px">只上报「建周期 / 导入票据 / 导出 / 备份」这类事件，用于了解功能使用情况；<b>不上传发票、金额、文件名</b>。</div>
+        </div>
+        <div class="switch ${telemetryEnabled() ? 'on' : ''}" data-tel style="margin-top:4px"></div>
+      </div>
+      ${telemetryReady() ? '' : '<p class="hint" style="margin-top:8px">当前部署未接入统计服务，此开关暂不生效。</p>'}
+    </div>
+
     <div class="section-title"><span>关于</span></div>
     <div class="card">
       <div class="kv"><span class="k">应用</span><span class="v">票据管家 1.1.3</span></div>
@@ -138,6 +152,17 @@ export async function renderSettings(root) {
       rerender();
     });
   });
+
+  const telSw = root.querySelector('[data-tel]');
+  if (telSw) {
+    telSw.addEventListener('click', async () => {
+      const next = !telemetryEnabled();
+      setTelemetryEnabled(next);
+      await saveSettings({ telemetry: next });
+      toast(next ? '已开启匿名统计' : '已关闭匿名统计');
+      rerender();
+    });
+  }
 
   const wire = (a, fn) => { const el = root.querySelector(`[data-a="${a}"]`); if (el) el.addEventListener('click', fn); };
   wire('wp-pick', pickWallpaper);
@@ -197,8 +222,7 @@ async function resetTemplate() {
   });
   if (!ok) return;
   try {
-    const res = await fetch('assets/template.xlsx');
-    const buf = await res.arrayBuffer();
+    const buf = await loadDefaultTemplate();
     const info = await inspectTemplate(buf);
     await repo.set('template', { name: '金蝶员工报销表单（内置）', importedAt: Date.now(), data: buf });
     state.template = { name: '金蝶员工报销表单（内置）', data: buf };
@@ -238,7 +262,7 @@ async function backup() {
   const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 5 } });
   const name = `票据管家备份_${new Date().toISOString().slice(0, 10)}.zip`;
   const res = await saveBlob(blob, name);
-  if (res.ok) toast('备份已导出', 'ok');
+  if (res.ok) { toast('备份已导出', 'ok'); track('backup'); }
   else if (!res.wechat) toast('备份失败：' + (res.error || ''), 'err');
 }
 

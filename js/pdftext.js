@@ -1,9 +1,17 @@
 /* PDF 文本提取与发票信息识别（离线，基于 pdf.js） */
 
+import { ensurePdfWorker } from './assets.js';
+
 let libPromise = null;
 
 export function loadPdfLib() {
-  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (window.pdfjsLib) {
+    try {
+      const worker = ensurePdfWorker() || window.__PDF_WORKER_URL || '';
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = worker || new URL('vendor/pdf.worker.min.js', location.href).href;
+    } catch (e) { /* ignore */ }
+    return Promise.resolve(window.pdfjsLib);
+  }
   if (libPromise) return libPromise;
   libPromise = new Promise((resolve, reject) => {
     const s = document.createElement('script');

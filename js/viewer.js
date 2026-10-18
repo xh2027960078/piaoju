@@ -8,6 +8,7 @@ import { saveBlob, openBlob, shareBlob } from './platform.js';
 const KIND_LABEL = { image: '图片', pdf: 'PDF', other: '文件' };
 
 import { loadPdfLib } from './pdftext.js';
+import { track } from './telemetry.js';
 
 
 /**
@@ -78,6 +79,7 @@ export async function openFileViewer(id, opts = {}) {
           if (res.ok && opts.onChanged) opts.onChanged();
         } else if (k === 'share') {
           if (!buf) return;
+          track('share_file');
           const res = await shareBlob(new Blob([buf], { type: f.mime || 'application/octet-stream' }), f.name);
           if (!res.ok) toast(res.error || '分享失败', 'err');
         } else if (k === 'open') {

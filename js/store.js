@@ -2,6 +2,7 @@
 
 import { repo } from './db.js';
 import { DEFAULT_CHARTS } from './appearance.js';
+import { inspectTemplate } from './xlsx.js';
 
 
 export const DEFAULT_SETTINGS = {
@@ -46,7 +47,6 @@ export async function loadSettings() {
   if (tpl && tpl.data) {
     state.template = tpl;
     try {
-      const { inspectTemplate } = await import('./xlsx.js');
       state.templateInfo = await inspectTemplate(tpl.data);
       state.templateInfo.ok = true;
     } catch (e) {
