@@ -1,8 +1,8 @@
 {
-    "versionCode":  37,
-    "versionName":  "1.1.33",
-    "url":  "piaoju-1.1.33.apk",
-    "size":  1106049,
-    "notes":  "1. 俄罗斯方块改为底部大按钮操作，去掉滑动手势，不会误触\n2. 新增「直落到底」按钮\n3. 后台发布文件名带版本号，避免 CDN 缓存旧包",
+    "versionCode":  38,
+    "versionName":  "1.1.34",
+    "url":  "piaoju-1.1.34.apk",
+    "size":  1110222,
+    "notes":  "1. 新增「要闻」页签：天气 + 微博热搜 TOP10\n2. 断网时显示上次缓存\n3. 后台发布文件名带版本号，避免 CDN 缓存旧包",
     "force":  false
 }
