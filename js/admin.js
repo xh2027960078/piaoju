@@ -191,10 +191,11 @@ function aggregate(events) {
 
   for (const e of events) {
     const dev = e.device_id || 'unknown';
-    const rec = devices.get(dev) || { id: dev, count: 0, first: e.created_at, last: e.created_at, platform: e.platform || '-', version: e.app_version || '-', lastEvent: e.event, label: '', screen: '' };
+    const rec = devices.get(dev) || { id: dev, count: 0, first: e.created_at, last: e.created_at, platform: e.platform || '-', version: e.app_version || '-', lastEvent: e.event, label: '', screen: '', city: '' };
     rec.count++;
     if (e.created_at < rec.first) rec.first = e.created_at;
     if (e.created_at > rec.last) { rec.last = e.created_at; rec.lastEvent = e.event; rec.platform = e.platform || rec.platform; rec.version = e.app_version || rec.version; }
+    if (e.event === 'device_location' && e.props && e.props.city) rec.city = e.props.city;
     if (e.device_label) rec.label = e.device_label;
     if (e.screen) rec.screen = e.screen;
     devices.set(dev, rec);
@@ -309,7 +310,7 @@ function renderDashboard() {
     <tr class="a-dev-row" data-dev="${esc(d.id)}" title="点击查看这台设备都做了什么">
       <td>
         <div class="a-dev-label">${esc(d.label || '未知机型')}</div>
-        <div class="a-dev-sub mono">${esc(shortId(d.id))}${d.screen ? ' · ' + esc(d.screen) : ''}</div>
+        <div class="a-dev-sub mono">${esc(shortId(d.id))}${d.screen ? ' · ' + esc(d.screen) : ''}${d.city ? ' · ' + esc(d.city) : ''}</div>
       </td>
       <td>${esc(platformName(d.platform))}</td>
       <td>${esc(d.version)}</td>

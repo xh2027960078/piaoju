@@ -15,6 +15,10 @@ import { isWeChat } from './env.js';
 import { loadDefaultTemplate } from './assets.js';
 import { track, initTelemetry } from './telemetry.js';
 import { maybeAutoCheck } from './update.js';
+/*H5-STRIP-START*/
+import { renderGames } from './views/gamesview.js';
+/*H5-STRIP-END*/
+import { renderNews } from './views/newsview.js';
 import { inspectTemplate } from './xlsx.js';
 import { rowsForTemplate, buildZip, buildReimbursement } from './exporter.js';
 import { periodMenu } from './views/periods.js';
@@ -23,6 +27,10 @@ const TABS = {
   periods: { title: '周期', sub: '' },
   charts: { title: '图表', sub: '报销花费一览' },
   export: { title: '导出', sub: '打包 ZIP / 生成报销单' },
+  news: { title: '要闻', sub: '天气 · 微博热搜' },
+  /*H5-STRIP-START*/
+  games: { title: '娱乐', sub: '小游戏 · 离线可玩' },
+  /*H5-STRIP-END*/
   settings: { title: '设置', sub: '默认填写值与数据管理' },
 };
 
@@ -87,8 +95,15 @@ export function render() {
   switch (state.tab) {
     case 'charts': renderCharts(viewEl); break;
     case 'export': renderExport(viewEl); break;
+    case 'news': renderNews(viewEl); break;
+    /*H5-STRIP-START*/
+    case 'games': (window.Android ? renderGames(viewEl) : renderPeriods(viewEl)); break;
+    /*H5-STRIP-END*/
     case 'settings': renderSettings(viewEl); break;
-    default: renderPeriods(viewEl);
+    case 'periods': renderPeriods(viewEl); break;
+    default:
+      viewEl.innerHTML = '<div class="empty" style="padding:60px 20px"><p>页面脚本不完整，缺少「' + state.tab + '」页</p><p style="font-size:12px">请强制刷新，或重新上传网页文件</p></div>';
+      break;
   }
   renderFab();
 }
@@ -127,6 +142,9 @@ export function goBack() {
 }
 
 export function switchTab(tab) {
+  /*H5-STRIP-START*/
+  if (tab === 'games' && !window.Android) tab = 'periods';
+  /*H5-STRIP-END*/
   state.tab = tab;
   state.screen = 'tabs';
   track('page_view', { page: tab });

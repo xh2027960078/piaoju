@@ -167,6 +167,13 @@ function showUpdate(info, cur) {
         if (bar) bar.style.width = `${p}%`;
         if (label) label.textContent = p >= 100 ? '下载完成，正在打开安装器…' : `正在下载 ${p}%`;
       };
+      window.__onUpdateReady = (apkName, apkCode, savedPath) => {
+        if (label) {
+          label.textContent = '已下载 v' + apkName + '（#' + apkCode + '）'
+            + (savedPath ? '，已存到 ' + savedPath : '')
+            + '，正在打开安装器…';
+        }
+      };
       window.__onUpdateFail = (msg) => {
         if (label) label.textContent = `下载失败：${msg}`;
         if (goBtn) { goBtn.disabled = false; goBtn.textContent = '重试'; }
@@ -185,12 +192,17 @@ function showUpdate(info, cur) {
         goBtn.textContent = '下载中…';
         wrap.style.display = 'block';
         // 同一版本内 JS 与原生一一对应，直接带上期望版本号
-        window.Android.downloadAndInstall(apkUrl, Number(info.versionCode) || 0);
+        try {
+          window.Android.downloadAndInstall(apkUrl, Number(info.versionCode) || 0, Number(info.size) || 0);
+        } catch (e) {
+          window.Android.downloadAndInstall(apkUrl, Number(info.versionCode) || 0);
+        }
       });
     },
     onClose() {
       window.__onUpdateProgress = null;
       window.__onUpdateFail = null;
+      window.__onUpdateReady = null;
     },
   });
 }

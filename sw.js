@@ -1,5 +1,5 @@
 /* 离线缓存：应用外壳走本地缓存；配置文件始终走网络 */
-const CACHE = 'piaoju-v26';
+const CACHE = 'piaoju-v31';
 const ASSETS = [
   './',
   './index.html',
@@ -31,6 +31,10 @@ const ASSETS = [
   './js/views/chartsview.js',
   './js/views/exportview.js',
   './js/views/settingsview.js',
+  /*H5-STRIP-START*/
+  './js/views/gamesview.js',
+  './js/views/newsview.js',
+  /*H5-STRIP-END*/
   './assets/template.xlsx',
   './manifest.webmanifest',
   './admin.html',
