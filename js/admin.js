@@ -88,7 +88,7 @@ async function fetchEvents() {
 }
 
 async function fetchReleases() {
-  const res = await fetch(`${cfg.supabaseUrl}/rest/v1/releases?select=*&order=version_code.desc&limit=10`, {
+  const res = await fetch(`${cfg.supabaseUrl}/rest/v1/releases?select=*&order=version_code.desc,created_at.desc&limit=10`, {
     headers: { apikey: cfg.supabaseAnonKey, Authorization: `Bearer ${token()}` },
   });
   if (!res.ok) return [];
@@ -153,7 +153,7 @@ async function createRelease({ code, name, url, size, notes }) {
 /* ---------------- 聚合 ---------------- */
 /* 游戏时长排行（按累计秒数） */
 function gameRank(map) {
-  const GAME_NAME = { mine: '扫雷', g2048: '2048', snake: '贪吃蛇' };
+  const GAME_NAME = { mine: '扫雷', g2048: '2048', snake: '贪吃蛇', tetris: '俄罗斯方块' };
   const rows = [...(map || new Map()).entries()]
     .sort((x, y) => y[1].seconds - x[1].seconds)
     .map(([k, v]) => [GAME_NAME[k] || k, v]);
@@ -492,6 +492,8 @@ async function publishFromForm() {
   if (!file) { msg.textContent = '请先选择 APK 文件'; return; }
   if (!code || code < 1) { msg.textContent = 'versionCode 必须是正整数'; return; }
   if (!name) { msg.textContent = '请填写版本名'; return; }
+  const dup = (state.releases || []).find((r) => Number(r.version_code) === code);
+  if (dup) { msg.textContent = `versionCode #${code} 已存在（v${dup.version_name}），请先删除那条记录或改用更大的编号`; return; }
   const apkVer = fileEl.dataset.apkVersion || '';
   if (!apkVer) { msg.textContent = '无法识别这个 APK 的内部版本，请确认选的是「票据管家-vX.apk」'; return; }
   const forceEl = main.querySelector('#relForce');
@@ -505,12 +507,13 @@ async function publishFromForm() {
   msg.textContent = '';
 
   try {
-    const apkName = `piaoju-${name}.apk`;
+    // 文件名带版本名 + versionCode：每次发布都是新路径，避免 CDN 返回旧文件
+    const apkName = `piaoju-${name}-${code}.apk`;
     await uploadApk(file, apkName, (p) => {
       if (bar) bar.querySelector('i').style.width = `${Math.round(p * 100)}%`;
       msg.textContent = `上传中 ${Math.round(p * 100)}%`;
     });
-    const url = `${cfg.supabaseUrl}/storage/v1/object/public/app/${encodeURIComponent(apkName)}`;
+    const url = `${cfg.supabaseUrl}/storage/v1/object/public/app/${encodeURIComponent(apkName)}?v=${code}`;
     await createRelease({
       code,
       name,

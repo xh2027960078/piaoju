@@ -1,8 +1,8 @@
 {
-    "versionCode":  34,
-    "versionName":  "1.1.30",
-    "url":  "piaoju-1.1.30.apk",
-    "size":  1101953,
-    "notes":  "1. 修复 Supabase 更新请求被当成列筛选（HTTP 400）\n2. 后台发布支持测试模式",
+    "versionCode":  37,
+    "versionName":  "1.1.33",
+    "url":  "piaoju-1.1.33.apk",
+    "size":  1106049,
+    "notes":  "1. 俄罗斯方块改为底部大按钮操作，去掉滑动手势，不会误触\n2. 新增「直落到底」按钮\n3. 后台发布文件名带版本号，避免 CDN 缓存旧包",
     "force":  false
 }

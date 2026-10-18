@@ -5,7 +5,7 @@ import { esc } from './ui.js';
 
 const CHECK_KEY = 'pj-last-update-check';
 // 兜底：即使配置文件是旧版（没有 releaseApi），也知道去后台问
-const DEFAULT_RELEASE_API = 'https://pihrlxposrvbifachezg.supabase.co/rest/v1/releases?select=*&order=version_code.desc&limit=1';
+const DEFAULT_RELEASE_API = 'https://pihrlxposrvbifachezg.supabase.co/rest/v1/releases?select=*&order=version_code.desc,created_at.desc&limit=1';
 
 export function currentVersion() {
   try {
@@ -184,7 +184,8 @@ function showUpdate(info, cur) {
         goBtn.disabled = true;
         goBtn.textContent = '下载中…';
         wrap.style.display = 'block';
-        window.Android.downloadAndInstall(apkUrl);
+        // 同一版本内 JS 与原生一一对应，直接带上期望版本号
+        window.Android.downloadAndInstall(apkUrl, Number(info.versionCode) || 0);
       });
     },
     onClose() {
