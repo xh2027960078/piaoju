@@ -1,8 +1,8 @@
 {
-    "versionCode":  17,
-    "versionName":  "1.1.14",
-    "url":  "piaoju-1.1.14.apk",
-    "size":  1085491,
-    "notes":  "1. 修复导入 PDF 后内容为空（0 字节）无法预览\n2. 选文件改为先复制到本应用再读取，微信/网盘来源也能正常导入\n3. 导入时自动拦截 0 字节文件并提示",
+    "versionCode":  18,
+    "versionName":  "1.1.15",
+    "url":  "piaoju-1.1.15.apk",
+    "size":  1089587,
+    "notes":  "1. 管理后台可以直接上传新版 APK 并发布\n2. App 优先从后台读取版本信息，发布后自动提示更新\n3. 修复导入 PDF 内容为空的问题",
     "force":  false
 }

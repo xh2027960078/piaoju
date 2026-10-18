@@ -19,9 +19,37 @@ function resolveUrl(base, rel) {
   try { return new URL(rel, base).href; } catch (e) { return rel; }
 }
 
+/** 统一 version.json / releases 表两种格式 */
+function normalize(row, base) {
+  if (!row) return null;
+  const code = Number(row.version_code != null ? row.version_code : row.versionCode);
+  if (!code) return null;
+  return {
+    versionCode: code,
+    versionName: row.version_name || row.versionName || '',
+    url: row.url ? resolveUrl(base, row.url) : '',
+    size: Number(row.size) || 0,
+    notes: row.notes || '',
+  };
+}
+
+async function loadSource(url) {
+  const sep = url.includes('?') ? '&' : '?';
+  const res = await fetch(`${url}${sep}t=${Date.now()}`, { cache: 'no-store' });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const rows = Array.isArray(data) ? data : [data];
+  const first = rows[0];
+  if (!first) return null;
+  if (first.redirect) return loadSource(resolveUrl(url, first.redirect));
+  return normalize(first, url);
+}
+
+/** 后台发布（releases 表）优先，其次 GitHub 上的 version.json */
 export async function checkForUpdate(opts = {}) {
   const cfg = window.APP_CONFIG || {};
-  if (!cfg.updateUrl) {
+  const sources = [cfg.releaseApi, cfg.updateUrl].filter(Boolean);
+  if (!sources.length) {
     if (!opts.silent) toast('当前版本未配置更新地址', 'err');
     return;
   }
@@ -30,15 +58,15 @@ export async function checkForUpdate(opts = {}) {
     return;
   }
   try {
-    const sep = cfg.updateUrl.includes('?') ? '&' : '?';
-    const res = await fetch(`${cfg.updateUrl}${sep}t=${Date.now()}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const info = await res.json();
+    const found = (await Promise.all(sources.map((u) => loadSource(u).catch(() => null)))).filter(Boolean);
+    if (!found.length) throw new Error('读取版本信息失败');
+    const info = found.reduce((a, b) => (b.versionCode > a.versionCode ? b : a));
     const cur = currentVersion();
-    if (!info.versionCode || Number(info.versionCode) <= cur.code) {
+    if (info.versionCode <= cur.code) {
       if (!opts.silent) toast(`已是最新版本 v${cur.name}`);
       return;
     }
+    if (!info.url) throw new Error('版本信息缺少下载地址');
     showUpdate(info, cur);
   } catch (e) {
     if (!opts.silent) toast(`检查更新失败：${e.message}`, 'err');

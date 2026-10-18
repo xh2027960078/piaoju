@@ -10,7 +10,7 @@ const main = document.getElementById('aMain');
 const actions = document.getElementById('aActions');
 const subEl = document.getElementById('a-sub');
 
-const state = { events: [], loading: false, error: '' };
+const state = { events: [], releases: [], loading: false, error: '', uploading: false };
 
 function token() { try { return sessionStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; } }
 function setToken(t) { try { t ? sessionStorage.setItem(TOKEN_KEY, t) : sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* ignore */ } }
@@ -29,6 +29,14 @@ function fmtTime(iso) {
   return `${d.getMonth() + 1}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 function shortId(id) { return String(id || '').slice(0, 8); }
+
+function bumpVersionName(name) {
+  const parts = String(name || '0.0.0').split('.');
+  const last = Number(parts[parts.length - 1]) || 0;
+  parts[parts.length - 1] = String(last + 1);
+  return parts.join('.');
+}
+
 
 async function login(email, password) {
   const res = await fetch(`${cfg.supabaseUrl}/auth/v1/token?grant_type=password`, {
@@ -50,6 +58,47 @@ async function fetchEvents() {
   if (res.status === 401 || res.status === 403) { setToken(''); throw new Error('登录已过期，请重新登录'); }
   if (!res.ok) throw new Error(`读取数据失败（${res.status}）`);
   return res.json();
+}
+
+async function fetchReleases() {
+  const res = await fetch(`${cfg.supabaseUrl}/rest/v1/releases?select=*&order=version_code.desc&limit=10`, {
+    headers: { apikey: cfg.supabaseAnonKey, Authorization: `Bearer ${token()}` },
+  });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+/* 上传 APK 到 Storage 并写入版本记录 */
+function uploadApk(file, name, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${cfg.supabaseUrl}/storage/v1/object/app/${encodeURIComponent(name)}`);
+    xhr.setRequestHeader('apikey', cfg.supabaseAnonKey);
+    xhr.setRequestHeader('Authorization', `Bearer ${token()}`);
+    xhr.setRequestHeader('x-upsert', 'true');
+    xhr.setRequestHeader('Content-Type', file.type || 'application/vnd.android.package-archive');
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`上传失败（${xhr.status}）${String(xhr.responseText || '').slice(0, 120)}`));
+    };
+    xhr.onerror = () => reject(new Error('上传失败：网络错误'));
+    xhr.send(file);
+  });
+}
+
+async function createRelease({ code, name, url, size, notes }) {
+  const res = await fetch(`${cfg.supabaseUrl}/rest/v1/releases`, {
+    method: 'POST',
+    headers: {
+      apikey: cfg.supabaseAnonKey,
+      Authorization: `Bearer ${token()}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify([{ version_code: code, version_name: name, url, size, notes }]),
+  });
+  if (!res.ok) throw new Error(`写入版本记录失败（${res.status}）${String(await res.text()).slice(0, 120)}`);
 }
 
 /* ---------------- 聚合 ---------------- */
@@ -196,6 +245,18 @@ function renderDashboard() {
     </td></tr>`;
   }).join('');
 
+  const latest = (state.releases && state.releases[0]) || null;
+  const nextCode = latest ? Number(latest.version_code) + 1 : 1;
+  const nextName = latest ? bumpVersionName(latest.version_name) : '';
+  const releaseRows = (state.releases || []).map((r) => `
+    <div class="a-rel-item">
+      <span class="a-tag">v${esc(r.version_name)}</span>
+      <span class="a-muted">#${r.version_code}</span>
+      <span class="a-muted">${r.size ? (r.size / 1024 / 1024).toFixed(1) + ' MB' : ''}</span>
+      <span class="a-muted">${fmtTime(r.created_at)}</span>
+      <a href="${esc(r.url)}" target="_blank" rel="noopener">下载</a>
+    </div>`).join('') || '<div class="a-muted">还没有发布记录</div>';
+
   main.innerHTML = `
     <div class="a-stats">
       <div class="a-stat blue"><div class="k">今日活跃设备</div><div class="v">${a.todayCount}<small>台</small></div></div>
@@ -234,6 +295,24 @@ function renderDashboard() {
           <tbody>${devRows}</tbody>
         </table>
       </div>
+    </div>
+
+    <div class="a-card" id="releaseCard">
+      <h3>发布新版本<span>上传 APK 后，已安装的 App 打开时会自动提示更新</span></h3>
+      <div class="a-rel">
+        <input type="file" id="relFile" accept=".apk,application/vnd.android.package-archive" />
+        <div class="a-rel-row">
+          <label>versionCode <input id="relCode" type="number" min="1" value="${nextCode}" /></label>
+          <label>版本名 <input id="relName" type="text" value="${nextName}" /></label>
+        </div>
+        <textarea id="relNotes" rows="3" placeholder="更新内容，一行一条"></textarea>
+        <div class="a-rel-actions">
+          <button class="primary" id="relGo">上传并发布</button>
+          <span id="relMsg" class="a-muted"></span>
+        </div>
+        <div class="update-bar" id="relBar" hidden><i style="width:0%"></i></div>
+      </div>
+      <div class="a-rel-list">${releaseRows}</div>
     </div>`;
 
   main.querySelectorAll('.a-dev-row').forEach((row) => {
@@ -242,13 +321,68 @@ function renderDashboard() {
       if (next && next.classList.contains('a-dev-detail')) next.hidden = !next.hidden;
     });
   });
+
+  const relGo = main.querySelector('#relGo');
+  if (relGo) {
+    relGo.addEventListener('click', () => publishFromForm());
+  }
+}
+
+async function publishFromForm() {
+  const fileEl = main.querySelector('#relFile');
+  const codeEl = main.querySelector('#relCode');
+  const nameEl = main.querySelector('#relName');
+  const notesEl = main.querySelector('#relNotes');
+  const msg = main.querySelector('#relMsg');
+  const bar = main.querySelector('#relBar');
+  const btn = main.querySelector('#relGo');
+
+  const file = fileEl && fileEl.files && fileEl.files[0];
+  const code = Number(codeEl && codeEl.value);
+  const name = String((nameEl && nameEl.value) || '').trim();
+  if (!file) { msg.textContent = '请先选择 APK 文件'; return; }
+  if (!code || code < 1) { msg.textContent = 'versionCode 必须是正整数'; return; }
+  if (!name) { msg.textContent = '请填写版本名'; return; }
+
+  state.uploading = true;
+  btn.disabled = true;
+  btn.textContent = '上传中…';
+  if (bar) bar.hidden = false;
+  msg.textContent = '';
+
+  try {
+    const apkName = `piaoju-${name}.apk`;
+    await uploadApk(file, apkName, (p) => {
+      if (bar) bar.querySelector('i').style.width = `${Math.round(p * 100)}%`;
+      msg.textContent = `上传中 ${Math.round(p * 100)}%`;
+    });
+    const url = `${cfg.supabaseUrl}/storage/v1/object/public/app/${encodeURIComponent(apkName)}`;
+    await createRelease({
+      code,
+      name,
+      url,
+      size: file.size,
+      notes: String((notesEl && notesEl.value) || '').trim(),
+    });
+    msg.textContent = '发布成功，App 打开后即可收到更新提示';
+    btn.textContent = '已发布';
+    state.releases = await fetchReleases();
+    setTimeout(() => { state.uploading = false; renderDashboard(); }, 1200);
+  } catch (e) {
+    msg.textContent = e.message;
+    btn.disabled = false;
+    btn.textContent = '重新上传';
+    state.uploading = false;
+  }
 }
 
 async function refresh() {
-  if (state.loading) return;
+  if (state.loading || state.uploading) return;
   state.loading = true;
   try {
-    state.events = await fetchEvents();
+    const [events, releases] = await Promise.all([fetchEvents(), fetchReleases()]);
+    state.events = events;
+    state.releases = releases;
     state.error = '';
     renderDashboard();
   } catch (e) {
@@ -269,7 +403,7 @@ function boot() {
   }
   if (!token()) { renderLogin(); return; }
   refresh();
-  setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, 60000);
+  setInterval(() => { if (document.visibilityState === 'visible' && !state.uploading) refresh(); }, 60000);
 }
 
 boot();
