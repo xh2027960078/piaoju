@@ -194,7 +194,9 @@ function renderDashboard() {
   document.getElementById('btnLogout').addEventListener('click', () => { setToken(''); renderLogin(); });
 
   if (!state.events.length) {
-    main.innerHTML = '<div class="a-empty">还没有数据。让同事打开应用并操作几次，几秒后这里就会出现。</div>';
+    main.innerHTML = `<div class="a-empty">还没有使用数据。让同事打开应用并操作几次，几秒后这里就会出现。</div>
+      ${releaseCardHtml()}`;
+    wireRelease();
     return;
   }
 
@@ -248,14 +250,6 @@ function renderDashboard() {
   const latest = (state.releases && state.releases[0]) || null;
   const nextCode = latest ? Number(latest.version_code) + 1 : 1;
   const nextName = latest ? bumpVersionName(latest.version_name) : '';
-  const releaseRows = (state.releases || []).map((r) => `
-    <div class="a-rel-item">
-      <span class="a-tag">v${esc(r.version_name)}</span>
-      <span class="a-muted">#${r.version_code}</span>
-      <span class="a-muted">${r.size ? (r.size / 1024 / 1024).toFixed(1) + ' MB' : ''}</span>
-      <span class="a-muted">${fmtTime(r.created_at)}</span>
-      <a href="${esc(r.url)}" target="_blank" rel="noopener">下载</a>
-    </div>`).join('') || '<div class="a-muted">还没有发布记录</div>';
 
   main.innerHTML = `
     <div class="a-stats">
@@ -297,8 +291,34 @@ function renderDashboard() {
       </div>
     </div>
 
+    ${releaseCardHtml()}`;
+
+  main.querySelectorAll('.a-dev-row').forEach((row) => {
+    row.addEventListener('click', () => {
+      const next = row.nextElementSibling;
+      if (next && next.classList.contains('a-dev-detail')) next.hidden = !next.hidden;
+    });
+  });
+
+  wireRelease();
+}
+
+/** 发布新版本卡片（即使还没有统计数据也显示） */
+function releaseCardHtml() {
+  const latest = (state.releases && state.releases[0]) || null;
+  const nextCode = latest ? Number(latest.version_code) + 1 : 1;
+  const nextName = latest ? bumpVersionName(latest.version_name) : '';
+  const rows = (state.releases || []).map((r) => `
+    <div class="a-rel-item">
+      <span class="a-tag">v${esc(r.version_name)}</span>
+      <span class="a-muted">#${r.version_code}</span>
+      <span class="a-muted">${r.size ? (r.size / 1024 / 1024).toFixed(1) + ' MB' : ''}</span>
+      <span class="a-muted">${fmtTime(r.created_at)}</span>
+      <a href="${esc(r.url)}" target="_blank" rel="noopener">下载</a>
+    </div>`).join('') || '<div class="a-muted">还没有发布记录</div>';
+  return `
     <div class="a-card" id="releaseCard">
-      <h3>发布新版本<span>上传 APK 后，已安装的 App 打开时会自动提示更新</span></h3>
+      <h3>发布新版本<span>选择 APK 上传，已安装的 App 打开时会收到更新提示</span></h3>
       <div class="a-rel">
         <input type="file" id="relFile" accept=".apk,application/vnd.android.package-archive" />
         <div class="a-rel-row">
@@ -312,20 +332,13 @@ function renderDashboard() {
         </div>
         <div class="update-bar" id="relBar" hidden><i style="width:0%"></i></div>
       </div>
-      <div class="a-rel-list">${releaseRows}</div>
+      <div class="a-rel-list">${rows}</div>
     </div>`;
+}
 
-  main.querySelectorAll('.a-dev-row').forEach((row) => {
-    row.addEventListener('click', () => {
-      const next = row.nextElementSibling;
-      if (next && next.classList.contains('a-dev-detail')) next.hidden = !next.hidden;
-    });
-  });
-
+function wireRelease() {
   const relGo = main.querySelector('#relGo');
-  if (relGo) {
-    relGo.addEventListener('click', () => publishFromForm());
-  }
+  if (relGo) relGo.addEventListener('click', () => publishFromForm());
 }
 
 async function publishFromForm() {

@@ -1,8 +1,8 @@
 {
-    "versionCode":  18,
-    "versionName":  "1.1.15",
-    "url":  "piaoju-1.1.15.apk",
+    "versionCode":  19,
+    "versionName":  "1.1.16",
+    "url":  "piaoju-1.1.16.apk",
     "size":  1089587,
-    "notes":  "1. 管理后台可以直接上传新版 APK 并发布\n2. App 优先从后台读取版本信息，发布后自动提示更新\n3. 修复导入 PDF 内容为空的问题",
+    "notes":  "1. 管理后台「发布新版本」卡片固定显示（没有统计数据时也能看到）\n2. 后台页面改为网络优先，更新后刷新即可生效\n3. 修复导入 PDF 内容为空的问题",
     "force":  false
 }
