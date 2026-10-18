@@ -1,8 +1,8 @@
 {
-    "versionCode":  43,
-    "versionName":  "1.1.39",
-    "url":  "piaoju-1.1.39.apk",
-    "size":  1114318,
-    "notes":  "1. 要闻热搜可点击，用系统浏览器打开\n2. 无链接时跳到微博搜索",
+    "versionCode":  47,
+    "versionName":  "1.1.43",
+    "url":  "piaoju-1.1.43.apk",
+    "size":  1118414,
+    "notes":  "1. 知乎/百度热榜增加多源并显示失败原因\n2. 天气城市名缺失时显示「当前位置」并尝试反查城市\n3. 热搜点击改用系统浏览器",
     "force":  false
 }

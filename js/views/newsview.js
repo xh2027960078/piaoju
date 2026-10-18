@@ -1,12 +1,13 @@
-/* 要闻：天气 + 微博热搜（在线拉取，离线显示上次缓存） */
+/* 要闻：本月账本 + 天气（含空气质量）+ 热榜（微博/知乎/百度）+ 节假日 + 小贴士 */
 import { toast, sheet } from '../ui.js';
 import { rerender } from '../render.js';
 import { track } from '../telemetry.js';
 
-const CACHE_KEY = 'pj-news-cache-v2';
+const CACHE_KEY = 'pj-news-cache-v3';
 const LOC_KEY = 'pj-news-loc';
 const CITY_KEY = 'pj-news-city';
 const REPORT_KEY = 'pj-news-reported';
+const HOT_KEY = 'pj-news-hot-v3';
 
 const CITIES = [
   ['广州', 23.13, 113.26], ['深圳', 22.54, 114.06], ['北京', 39.90, 116.41],
@@ -37,20 +38,65 @@ const WEATHER_TEXT = {
   95: ['雷阵雨', '⛈'], 96: ['雷雨冰雹', '⛈'], 99: ['强雷雨冰雹', '⛈'],
 };
 
-const HOT_SOURCES = [
-  'https://api.vvhan.com/api/hotlist/wbHot',
-  'https://api.vvhan.com/api/hotlist?type=wbHot',
+const HOT_TABS = [
+  { id: 'weibo', name: '微博' },
+  { id: 'zhihu', name: '知乎' },
+  { id: 'baidu', name: '百度' },
+];
+
+const HOT_WEB = {
+  weibo: [
+    'https://api-hot.imsyy.top/weibo',
+    'https://api.vvhan.com/api/hotlist/wbHot',
+    'https://api.codelife.cc/api/top/list?lang=cn&id=KqndgxeLl9',
+  ],
+  zhihu: [
+    'https://api.vvhan.com/api/hotlist/zhihuHot',
+    'https://api-hot.imsyy.top/zhihu',
+    'https://api.codelife.cc/api/top/list?lang=cn&id=mproPpoq6O',
+  ],
+  baidu: [
+    'https://api.vvhan.com/api/hotlist/baiduRD',
+    'https://api-hot.imsyy.top/baidu',
+    'https://api.codelife.cc/api/top/list?lang=cn&id=Jb0vmloB1G',
+  ],
+};
+
+const PROXY = 'https://api.allorigins.win/raw?url=';
+
+/* 2026 年节假日（放假日首日） */
+const HOLIDAYS = [
+  ['元旦', '2026-01-01'], ['春节', '2026-02-17'], ['清明', '2026-04-05'],
+  ['劳动节', '2026-05-01'], ['端午', '2026-06-19'], ['中秋', '2026-09-25'],
+  ['国庆', '2026-10-01'], ['元旦', '2027-01-01'], ['春节', '2027-02-06'],
+];
+
+const TIPS = [
+  '天气转凉，早晚温差大，出门带件外套。',
+  '久坐记得每小时起身活动两分钟。',
+  '出门前看一眼空气质量，污染天戴个口罩。',
+  '睡前把手机放远一点，入睡会快很多。',
+  '每天喝够 8 杯水，比任何饮料都管用。',
+  '外卖点单先看评价再下单，踩雷概率减半。',
+  '包里常备一张纸巾和一支笔，关键时刻很有用。',
+  '重要的事写下来，脑子用来思考而不是记忆。',
+  '每周留半天什么都不安排，给自己充充电。',
+  '出门带把伞，天气预报也不总是准的。',
+  '眼睛累了看看远处，20 秒就够。',
+  '手机电量低于 20% 再充，电池更耐用。'
 ];
 
 let tried = false;
 
 let state = {
   weather: null,
-  hot: [],
+  hotTab: 'weibo',
+  hot: { weibo: [], zhihu: [], baidu: [] },
+  hotErr: { weibo: '', zhihu: '', baidu: '' },
+  hotLoading: false,
   updatedAt: 0,
   loading: false,
   errWeather: '',
-  errHot: '',
   locating: false,
 };
 
@@ -69,6 +115,17 @@ function writeCache() {
       weather: state.weather, hot: state.hot, updatedAt: Date.now(),
     }));
   } catch (e) { /* ignore */ }
+}
+
+function readHotCache() {
+  try {
+    const raw = localStorage.getItem(HOT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
+function writeHotCache() {
+  try { localStorage.setItem(HOT_KEY, JSON.stringify({ hot: state.hot, at: Date.now() })); } catch (e) { /* ignore */ }
 }
 
 /* ---------------- 定位 ---------------- */
@@ -146,7 +203,6 @@ async function resolveLocation(force) {
   return { lat: 23.13, lon: 113.26, city: '广州', from: 'default' };
 }
 
-/** 定位结果同步到后台（跟设备信息一起） */
 function reportLocation(loc) {
   if (!loc) return;
   const key = `${loc.lat},${loc.lon}`;
@@ -162,10 +218,31 @@ function reportLocation(loc) {
   });
 }
 
+async function reverseCity(lat, lon) {
+  try {
+    const r = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=zh`, { cache: 'no-store' });
+    if (r.ok) {
+      const j = await r.json();
+      return j.city || j.locality || j.principalSubdivision || '';
+    }
+  } catch (e) { /* ignore */ }
+  try {
+    const r2 = await fetch(`https://ipwho.is/${lat},${lon}`, { cache: 'no-store' });
+    if (r2.ok) {
+      const j2 = await r2.json();
+      return j2.city || '';
+    }
+  } catch (e) { /* ignore */ }
+  return '';
+}
 /* ---------------- 天气 ---------------- */
 async function loadWeather(fixed) {
   const loc = fixed && fixed.lat ? fixed : await resolveLocation(fixed);
   if (!loc) throw new Error('定位失败，可手动选择城市');
+  if (!loc.city && loc.lat) {
+    const c = await reverseCity(loc.lat, loc.lon);
+    if (c) loc.city = c;
+  }
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}`
     + '&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m'
     + '&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=3';
@@ -181,6 +258,17 @@ async function loadWeather(fixed) {
     min: daily.temperature_2m_min ? daily.temperature_2m_min[i] : null,
   }));
   reportLocation(loc);
+
+  // 空气质量（同一家服务，失败不影响天气）
+  let aqi = null;
+  try {
+    const ares = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${loc.lat}&longitude=${loc.lon}&current=us_aqi,pm2_5`, { cache: 'no-store' });
+    if (ares.ok) {
+      const aj = await ares.json();
+      if (aj && aj.current) aqi = { value: aj.current.us_aqi, pm25: aj.current.pm2_5 };
+    }
+  } catch (e) { /* ignore */ }
+
   return {
     city: loc.city || '',
     src: loc.from || '',
@@ -189,29 +277,39 @@ async function loadWeather(fixed) {
     humidity: cur.relative_humidity_2m,
     wind: cur.wind_speed_10m,
     code: cur.weather_code,
+    aqi,
     days,
   };
 }
 
-/* ---------------- 微博热搜 ---------------- */
+/* ---------------- 热榜 ---------------- */
 function pickList(j) {
   if (Array.isArray(j)) return j;
   if (j && Array.isArray(j.data)) return j.data;
   if (j && j.data && Array.isArray(j.data.data)) return j.data.data;
   if (j && j.data && Array.isArray(j.data.realtime)) return j.data.realtime;
-  if (j && Array.isArray(j.result)) return j.result;
+  if (j && j.data && j.data.cards && Array.isArray(j.data.cards)) {
+    const c = j.data.cards[0];
+    if (c && Array.isArray(c.content)) return c.content;
+  }
+  if (Array.isArray(j.result)) return j.result;
   return [];
 }
 
-function normalizeHot(list) {
-  return list.map((it) => ({
-    title: it.title || it.name || it.word || it.hot_word || it.note || '',
-    hot: Number(it.hot || it.hotNum || it.num || it.hotnum || it.raw_hot || 0) || 0,
-    url: it.url || it.link || (it.word ? 'https://s.weibo.com/weibo?q=' + encodeURIComponent(it.word) : ''),
-  })).filter((x) => x.title).slice(0, 10);
+function normalizeHot(list, type) {
+  return list.map((it) => {
+    const t = it.target || {};
+    const title = it.title || it.name || it.word || it.hot_word || it.note || t.title || '';
+    const link = it.url || it.link || t.url || it.mobileUrl || (it.word ? 'https://s.weibo.com/weibo?q=' + encodeURIComponent(it.word) : '');
+    return {
+      title,
+      hot: Number(it.hot || it.hotNum || it.num || it.hotnum || it.raw_hot || it.hotScore || 0) || 0,
+      url: link,
+    };
+  }).filter((x) => x.title).slice(0, 10);
 }
 
-function loadHotNative() {
+function loadHotNative(type) {
   return new Promise((resolve, reject) => {
     if (!window.Android || !window.Android.fetchHotSearch) { reject(new Error('no-native')); return; }
     const id = 'h' + Date.now() + Math.random().toString(16).slice(2, 6);
@@ -222,50 +320,85 @@ function loadHotNative() {
       window.__onHotSearch = null;
       if (!json) { reject(new Error('接口无返回')); return; }
       try {
-        const list = normalizeHot(pickList(JSON.parse(json)));
+        const obj = JSON.parse(json);
+        if (obj && obj.__error) { reject(new Error(obj.__error)); return; }
+        const list = normalizeHot(pickList(obj), type);
         if (!list.length) { reject(new Error('数据为空')); return; }
         resolve(list);
       } catch (e) { reject(new Error('数据解析失败')); }
     };
-    window.Android.fetchHotSearch(id);
+    try {
+      window.Android.fetchHotSearch(type, id);
+    } catch (e) {
+      window.Android.fetchHotSearch(id); // 旧版原生只接受一个参数
+    }
   });
 }
 
-async function loadHot() {
-  try {
-    return await loadHotNative();
-  } catch (e) {
-    if (e.message !== 'no-native') { /* 继续尝试网页接口 */ }
-  }
-  let lastErr = '';
-  for (const url of HOT_SOURCES) {
-    try {
-      const res = await fetch(url, { cache: 'no-store' });
-      if (!res.ok) { lastErr = `HTTP ${res.status}`; continue; }
-      const j = await res.json();
-      const list = normalizeHot(pickList(j));
-      if (list.length) return list;
-      lastErr = '接口返回空列表';
-    } catch (e) {
-      lastErr = '网络不可用';
+async function tryUrl(url, type) {
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const j = await res.json();
+  const list = normalizeHot(pickList(j), type);
+  if (!list.length) throw new Error('接口返回空列表');
+  return list;
+}
+
+function hostOf(url) {
+  try { return new URL(url).host; } catch (e) { return url; }
+}
+
+async function loadHotWeb(type) {
+  const errs = [];
+  for (const url of (HOT_WEB[type] || [])) {
+    try { return await tryUrl(url, type); } catch (e) {
+      errs.push(hostOf(url) + '=' + (/Failed to fetch|NetworkError/i.test(e.message) ? '被拦截' : e.message));
     }
   }
-  throw new Error(lastErr || '热搜加载失败');
+  const lastErr = errs.join('; ');
+  if (type === 'weibo') {
+    try { return await tryUrl(PROXY + encodeURIComponent('https://weibo.com/ajax/side/hotSearch'), type); } catch (e) { lastErr = '代理失败：' + e.message; }
+  }
+  throw new Error(lastErr || '热榜加载失败');
+}
+
+async function loadHot(type) {
+  let nativeErr = '';
+  try {
+    return await loadHotNative(type);
+  } catch (e) {
+    nativeErr = e.message;
+  }
+  try {
+    return await loadHotWeb(type);
+  } catch (e) {
+    if (nativeErr && nativeErr !== 'no-native' && nativeErr !== '请求超时') {
+      throw new Error(nativeErr + ' / 网页：' + e.message);
+    }
+    throw new Error(e.message === '网络不可用' ? '网络被拦截（CORS/DNS）' : e.message);
+  }
+}
+
+/* ---------------- 本地统计 / 节假日 ---------------- */
+function nextHoliday() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (const [name, date] of HOLIDAYS) {
+    const d = new Date(date + 'T00:00:00');
+    if (isNaN(d.getTime())) continue;
+    const days = Math.round((d - today) / 86400000);
+    if (days >= 0) return { name, date, days };
+  }
+  return null;
+}
+
+function todayTip() {
+  const start = new Date(new Date().getFullYear(), 0, 0);
+  const dayOfYear = Math.floor((Date.now() - start.getTime()) / 86400000);
+  return TIPS[dayOfYear % TIPS.length];
 }
 
 /* ---------------- 渲染 ---------------- */
-/** 打开外部链接：App 内用原生浏览器，网页用 window.open */
-function openLink(url) {
-  if (!url) return;
-  try {
-    if (window.Android && window.Android.openExternal) {
-      window.Android.openExternal(url);
-      return;
-    }
-  } catch (e) { /* 继续用网页方式 */ }
-  const w = window.open(url, '_blank', 'noopener');
-  if (!w) location.href = url;
-}
 function esc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -284,6 +417,38 @@ function fmtHot(n) {
 
 function srcLabel(src) {
   return { gps: 'GPS 定位', ip: '网络定位', manual: '手动选择', default: '默认城市' }[src] || '';
+}
+
+function aqiLevel(v) {
+  if (v == null) return null;
+  if (v <= 50) return ['优', '#16a37b'];
+  if (v <= 100) return ['良', '#8bc34a'];
+  if (v <= 150) return ['轻度污染', '#f5a623'];
+  if (v <= 200) return ['中度污染', '#f0453a'];
+  if (v <= 300) return ['重度污染', '#b23fe4'];
+  return ['严重污染', '#7a1f1f'];
+}
+
+function holidayCard() {
+  const h = nextHoliday();
+  if (!h) return '';
+  return `
+    <div class="news-card">
+      <div class="news-card-head"><b>节假日</b><span class="news-sub">${esc(h.date)}</span></div>
+      <div class="countdown">
+        <span class="cd-num">${h.days === 0 ? '今天' : h.days}</span>
+        ${h.days === 0 ? '' : '<span class="cd-unit">天后</span>'}
+        <span class="cd-name">${esc(h.name)}</span>
+      </div>
+    </div>`;
+}
+
+function tipCard() {
+  return `
+    <div class="news-card tip-card">
+      <div class="news-card-head"><b>每日生活小贴士</b><span class="news-sub">每天一条</span></div>
+      <p class="tip-text">${esc(todayTip())}</p>
+    </div>`;
 }
 
 function weatherCard() {
@@ -311,6 +476,12 @@ function weatherCard() {
     </div>`;
   }).join('');
 
+  let aqiHtml = '';
+  if (w.aqi && w.aqi.value != null) {
+    const lv = aqiLevel(w.aqi.value);
+    aqiHtml = `<div class="aqi" style="color:${lv[1]}">空气质量 ${w.aqi.value} ${lv[0]}</div>`;
+  }
+
   return `
     <div class="news-card wx-card">
       <div class="news-card-head">
@@ -327,18 +498,23 @@ function weatherCard() {
           <em>体感 ${Math.round(w.feels)}° · 湿度 ${w.humidity}% · 风 ${Math.round(w.wind)} km/h</em>
         </span>
       </div>
+      ${aqiHtml}
       <div class="wx-days">${days}</div>
       <div class="news-foot">更新于 ${fmtTime(state.updatedAt)} · <button class="link-btn" data-refresh="all">刷新</button></div>
     </div>`;
 }
 
 function hotCard() {
-  const list = state.hot || [];
+  const tab = state.hotTab;
+  const list = state.hot[tab] || [];
+  const err = state.hotErr[tab] || '';
   return `
     <div class="news-card">
       <div class="news-card-head">
-        <b>微博热搜</b>
-        <span class="news-sub">${list.length ? 'TOP ' + list.length : (state.errHot ? '加载失败' : '加载中…')}</span>
+        <b>实时热榜</b>
+        <div class="hot-tabs">
+          ${HOT_TABS.map((t) => `<button class="hot-tab ${t.id === tab ? 'on' : ''}" data-hot-tab="${t.id}">${t.name}</button>`).join('')}
+        </div>
       </div>
       ${list.length
         ? `<div class="hot-list">${list.map((it, i) => `
@@ -347,16 +523,15 @@ function hotCard() {
               <span class="hot-title">${esc(it.title)}</span>
               ${it.hot ? `<span class="hot-num">${fmtHot(it.hot)}</span>` : ''}
             </button>`).join('')}</div>`
-        : (state.errHot
-          ? `<div class="news-empty">${esc(state.errHot)}<div style="margin-top:10px"><button class="btn small ghost" data-refresh="hot">重试</button></div></div>`
+        : (err
+          ? `<div class="news-empty">${esc(err)}<div style="margin-top:10px"><button class="btn small ghost" data-refresh="hot">重试</button></div></div>`
           : '<div class="news-skeleton" style="height:220px"></div>')}
-      ${list.length ? `<div class="news-foot">更新于 ${fmtTime(state.updatedAt)} · 数据来自微博</div>` : ''}
+      ${list.length ? `<div class="news-foot">更新于 ${fmtTime(state.updatedAt)} · 点击条目前往来源查看</div>` : ''}
     </div>`;
 }
 
 function openCityPicker() {
-  const rows = CITIES.map(([name, lat, lon]) => `
-    <button class="city-item" data-pick="${name}">${name}</button>`).join('');
+  const rows = CITIES.map(([name]) => `<button class="city-item" data-pick="${name}">${name}</button>`).join('');
   sheet({
     title: '选择城市',
     body: `
@@ -411,21 +586,36 @@ function openCityPicker() {
   });
 }
 
+function openLink(url) {
+  if (!url) return;
+  try {
+    if (window.Android && window.Android.openExternal) {
+      window.Android.openExternal(url);
+      return;
+    }
+  } catch (e) { /* 继续 */ }
+  const w = window.open(url, '_blank', 'noopener');
+  if (!w) location.href = url;
+}
+
 export function renderNews(root) {
-  if (!state.weather && !state.hot) {
+  if (!state.weather && !state.hot.weibo.length) {
     const c = readCache();
     if (c) {
       state.weather = c.weather || null;
-      state.hot = c.hot || [];
       state.updatedAt = c.updatedAt || 0;
     }
+    const hc = readHotCache();
+    if (hc && hc.hot) state.hot = Object.assign(state.hot, hc.hot);
   }
 
   root.innerHTML = `
     <div class="news-wrap">
       ${weatherCard()}
       ${hotCard()}
-      <p class="hint" style="text-align:center;margin:12px 4px 0">天气与热搜需要联网；断网时显示上次缓存的结果。</p>
+      ${holidayCard()}
+      ${tipCard()}
+      <p class="hint" style="text-align:center;margin:12px 4px 0">小贴士离线可用；天气与热榜需要联网。</p>
     </div>`;
 
   root.querySelectorAll('[data-refresh]').forEach((b) => b.addEventListener('click', () => {
@@ -435,11 +625,19 @@ export function renderNews(root) {
 
   root.querySelectorAll('[data-city]').forEach((b) => b.addEventListener('click', openCityPicker));
 
+  root.querySelectorAll('[data-hot-tab]').forEach((b) => b.addEventListener('click', () => {
+    const id = b.dataset.hotTab;
+    if (state.hotTab === id) return;
+    state.hotTab = id;
+    rerender();
+    if (!(state.hot[id] || []).length) refresh(['hot']);
+  }));
+
   root.querySelectorAll('[data-hot]').forEach((b) => b.addEventListener('click', () => {
-    const it = state.hot[Number(b.dataset.hot)];
+    const it = (state.hot[state.hotTab] || [])[Number(b.dataset.hot)];
     if (!it) return;
     if (it.url) openLink(it.url);
-    else openLink('https://s.weibo.com/weibo?q=' + encodeURIComponent(it.title));
+    else openLink('https://www.baidu.com/s?wd=' + encodeURIComponent(it.title));
   }));
 
   if (!tried) {
@@ -459,13 +657,15 @@ async function refresh(which = ['weather', 'hot'], fixedLoc) {
         .catch((e) => { state.errWeather = '天气加载失败：' + e.message; }));
     }
     if (which.includes('hot')) {
-      jobs.push(loadHot()
-        .then((h) => { state.hot = h; state.errHot = ''; })
-        .catch((e) => { state.errHot = '热搜加载失败：' + e.message; }));
+      const tab = state.hotTab;
+      jobs.push(loadHot(tab)
+        .then((h) => { state.hot[tab] = h; state.hotErr[tab] = ''; })
+        .catch((e) => { state.hotErr[tab] = '热榜加载失败：' + e.message; }));
     }
     await Promise.all(jobs);
     state.updatedAt = Date.now();
     writeCache();
+    writeHotCache();
   } finally {
     state.loading = false;
     rerender();
