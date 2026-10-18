@@ -1,5 +1,5 @@
 /* 离线缓存：应用外壳走本地缓存；配置文件始终走网络 */
-const CACHE = 'piaoju-v8';
+const CACHE = 'piaoju-v9';
 const ASSETS = [
   './',
   './index.html',
@@ -54,6 +54,17 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   let path = '';
   try { path = new URL(req.url).pathname; } catch (err) { path = ''; }
+  // 页面导航（打开 index.html / admin.html）永远先要网络，离线才用缓存
+  if (req.mode === 'navigate') {
+    e.respondWith(
+      fetch(req).then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+        return res;
+      }).catch(() => caches.match(req)),
+    );
+    return;
+  }
   // 更新包与版本清单不缓存
   if (path.indexOf('/app/') >= 0) return;
   // 配置与后台页面随时可能改：始终优先网络，取不到再用缓存
@@ -67,11 +78,13 @@ self.addEventListener('fetch', (e) => {
     );
     return;
   }
+  }
+  // 其余同源资源：网络优先，失败（离线）再用缓存，保证更新后刷新即生效
   e.respondWith(
-    caches.match(req).then((hit) => hit || fetch(req).then((res) => {
+    fetch(req).then((res) => {
       const copy = res.clone();
       caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
       return res;
-    }).catch(() => hit)),
+    }).catch(() => caches.match(req)),
   );
 });

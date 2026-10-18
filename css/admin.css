@@ -44,7 +44,16 @@ body {
   color: #fff; font-weight: 800; display: grid; place-items: center;
   font-size: 17px;
 }
-.a-brand h1 { margin: 0; font-size: 17px; font-weight: 700; }
+.a-brand h1 { margin: 0; font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.a-ver {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-soft);
+  padding: 2px 8px;
+  border-radius: 999px;
+  letter-spacing: .2px;
+}
 .a-brand p { margin: 1px 0 0; font-size: 12px; color: var(--text-3); }
 .a-actions { display: flex; gap: 8px; }
 
@@ -164,3 +173,13 @@ button:disabled { opacity: .5; cursor: default; }
 .a-rel-list { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
 .a-rel-item { display: flex; align-items: center; gap: 12px; font-size: 12.5px; padding: 8px 10px; background: var(--card-soft); border-radius: 10px; }
 .a-rel-item a { margin-left: auto; color: var(--primary); text-decoration: none; font-weight: 600; }
+/* 构建标记，便于确认页面是否为最新 */
+.a-build {
+  position: fixed;
+  right: 10px;
+  bottom: 8px;
+  font-size: 10.5px;
+  color: #b9c2d4;
+  pointer-events: none;
+  font-family: ui-monospace, Consolas, monospace;
+}

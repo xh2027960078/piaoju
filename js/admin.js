@@ -30,6 +30,33 @@ function fmtTime(iso) {
 }
 function shortId(id) { return String(id || '').slice(0, 8); }
 
+/* 事件名 / 平台名汉化 */
+const EVENT_LABEL = {
+  app_open: '打开应用',
+  page_view: '浏览页面',
+  period_create: '新建周期',
+  period_delete: '删除周期',
+  file_import: '导入票据/附件',
+  file_delete: '删除文件',
+  move_file: '移动文件',
+  export_zip: '导出 ZIP',
+  export_xlsx: '生成报销单',
+  backup: '备份数据',
+  restore: '恢复备份',
+  share_file: '转发文件',
+  detect: '识别发票',
+};
+const PLATFORM_LABEL = {
+  app: '安卓 App',
+  android: '安卓浏览器',
+  wechat: '微信',
+  ios: 'iOS',
+  desktop: '电脑',
+};
+function eventName(e) { return EVENT_LABEL[e] || e || '-'; }
+function platformName(p) { return PLATFORM_LABEL[p] || p || '-'; }
+
+
 function bumpVersionName(name) {
   const parts = String(name || '0.0.0').split('.');
   const last = Number(parts[parts.length - 1]) || 0;
@@ -225,7 +252,7 @@ function renderDashboard() {
     const timeline = mine.map((e) => `
       <div class="a-tl-item">
         <span class="a-tl-time">${fmtTime(e.created_at)}</span>
-        <span class="a-tag">${esc(e.event)}</span>
+        <span class="a-tag">${esc(eventName(e.event))}</span>
         <span class="a-tl-props">${esc(propsText(e.props))}</span>
       </div>`).join('');
     return `
@@ -234,12 +261,12 @@ function renderDashboard() {
         <div class="a-dev-label">${esc(d.label || '未知机型')}</div>
         <div class="a-dev-sub mono">${esc(shortId(d.id))}${d.screen ? ' · ' + esc(d.screen) : ''}</div>
       </td>
-      <td>${esc(d.platform)}</td>
+      <td>${esc(platformName(d.platform))}</td>
       <td>${esc(d.version)}</td>
       <td>${d.count}</td>
       <td class="a-muted">${fmtTime(d.first)}</td>
       <td>${fmtTime(d.last)}</td>
-      <td><span class="a-tag">${esc(d.lastEvent)}</span></td>
+      <td><span class="a-tag">${esc(eventName(d.lastEvent))}</span></td>
     </tr>
     <tr class="a-dev-detail" hidden><td colspan="7">
       <div class="a-tl-title">最近 ${mine.length} 条操作</div>
@@ -266,7 +293,7 @@ function renderDashboard() {
       </div>
       <div class="a-card">
         <h3>功能使用分布<span>事件次数</span></h3>
-        <div class="a-rank">${rank(a.byEvent, a.total)}</div>
+        <div class="a-rank">${rank(a.byEvent.map(([k, v]) => [eventName(k), v]), a.total)}</div>
       </div>
     </div>
 
@@ -277,7 +304,7 @@ function renderDashboard() {
       </div>
       <div class="a-card">
         <h3>平台分布</h3>
-        <div class="a-rank">${rank(a.byPlatform, a.total)}</div>
+        <div class="a-rank">${rank(a.byPlatform.map(([k, v]) => [platformName(k), v]), a.total)}</div>
       </div>
     </div>
 
@@ -407,6 +434,11 @@ async function refresh() {
 }
 
 function boot() {
+  const ver = (window.APP_CONFIG || {}).version || '';
+  const verEl = document.getElementById('aVer');
+  if (verEl) verEl.textContent = ver ? 'v' + ver : '';
+  const buildEl = document.getElementById('aBuild');
+  if (buildEl) buildEl.textContent = ver ? 'build ' + ver : '';
   if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) {
     main.innerHTML = `<div class="a-empty">
       还没有配置 Supabase。<br/><br/>
