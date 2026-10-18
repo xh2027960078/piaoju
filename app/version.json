@@ -1,8 +1,8 @@
 {
-    "versionCode":  28,
-    "versionName":  "1.1.25",
-    "url":  "piaoju-1.1.25.apk",
-    "size":  1097857,
-    "notes":  "1. 扫雷 / 2048 新增成就系统与音效\n2. 游玩时长计入管理后台\n3. 网页版仍不含游戏功能\n4. 发布新版时校验 APK 内部版本，支持删除发布记录",
+    "versionCode":  34,
+    "versionName":  "1.1.30",
+    "url":  "piaoju-1.1.30.apk",
+    "size":  1101953,
+    "notes":  "1. 修复 Supabase 更新请求被当成列筛选（HTTP 400）\n2. 后台发布支持测试模式",
     "force":  false
 }

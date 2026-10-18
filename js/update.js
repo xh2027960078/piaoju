@@ -4,6 +4,8 @@ import { sheet, toast } from './ui.js';
 import { esc } from './ui.js';
 
 const CHECK_KEY = 'pj-last-update-check';
+// 兜底：即使配置文件是旧版（没有 releaseApi），也知道去后台问
+const DEFAULT_RELEASE_API = 'https://pihrlxposrvbifachezg.supabase.co/rest/v1/releases?select=*&order=version_code.desc&limit=1';
 
 export function currentVersion() {
   try {
@@ -34,9 +36,25 @@ function normalize(row, base) {
 }
 
 async function loadSource(url) {
+  const cfg = window.APP_CONFIG || {};
   const sep = url.includes('?') ? '&' : '?';
-  const res = await fetch(`${url}${sep}t=${Date.now()}`, { cache: 'no-store' });
-  if (!res.ok) return null;
+  const isSb = /supabase\.co/i.test(url);
+  // Supabase 的 PostgREST 会把多余参数当成列筛选（400），所以不加时间戳
+  const full = isSb ? url : `${url}${sep}t=${Date.now()}`;
+  const headers = {};
+  if (isSb && cfg.supabaseAnonKey) {
+    headers.apikey = cfg.supabaseAnonKey;
+    if (/^eyJ/.test(cfg.supabaseAnonKey)) headers.Authorization = `Bearer ${cfg.supabaseAnonKey}`;
+    headers['Cache-Control'] = 'no-cache';
+  }
+  let res;
+  try {
+    res = await fetch(full, { cache: 'no-store', headers });
+  } catch (e) {
+    // 部分 WebView 对 cache 选项敏感，退回普通请求
+    res = await fetch(full, { headers });
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
   const rows = Array.isArray(data) ? data : [data];
   const first = rows[0];
@@ -48,7 +66,7 @@ async function loadSource(url) {
 /** 后台发布（releases 表）优先，其次 GitHub 上的 version.json */
 export async function checkForUpdate(opts = {}) {
   const cfg = window.APP_CONFIG || {};
-  const sources = [cfg.releaseApi, cfg.updateUrl].filter(Boolean);
+  const sources = [cfg.releaseApi || DEFAULT_RELEASE_API, cfg.updateUrl].filter(Boolean);
   if (!sources.length) {
     if (!opts.silent) toast('当前版本未配置更新地址', 'err');
     return;
@@ -58,12 +76,25 @@ export async function checkForUpdate(opts = {}) {
     return;
   }
   try {
-    const found = (await Promise.all(sources.map((u) => loadSource(u).catch(() => null)))).filter(Boolean);
-    if (!found.length) throw new Error('读取版本信息失败');
+    const found = [];
+    const attempts = [];
+    for (const u of sources) {
+      try {
+        const r = await loadSource(u);
+        attempts.push({ url: u, ok: !!r, code: r ? r.versionCode : 0, name: r ? r.versionName : '', err: r ? '' : '返回空结果' });
+        if (r) found.push(r);
+      } catch (e) {
+        attempts.push({ url: u, ok: false, err: (e && e.message) || 'fail' });
+      }
+    }
+    if (!found.length) {
+      if (!opts.silent) showDiag(attempts, null);
+      throw new Error('读取版本信息失败');
+    }
     const info = found.reduce((a, b) => (b.versionCode > a.versionCode ? b : a));
     const cur = currentVersion();
     if (info.versionCode <= cur.code) {
-      if (!opts.silent) toast(`已是最新版本 v${cur.name}`);
+      if (!opts.silent) showDiag(attempts, { info, cur });
       return;
     }
     if (!info.url) throw new Error('版本信息缺少下载地址');
@@ -73,6 +104,26 @@ export async function checkForUpdate(opts = {}) {
   }
 }
 
+
+/** 诊断面板：显示当前版本与每个更新源的真实结果 */
+function showDiag(attempts, result) {
+  const cur = currentVersion();
+  const rows = attempts.map((a) => {
+    const host = (() => { try { return new URL(a.url).host; } catch (e) { return a.url; } })();
+    const detail = a.ok ? `读到 v${a.name}（#${a.code}）` : `失败：${a.err || '无返回'}`;
+    return `<div class="kv"><span class="k">${esc(host)}</span><span class="v" style="text-align:right;font-size:12px">${esc(detail)}</span></div>`;
+  }).join('');
+  const tail = result
+    ? `<div class="kv"><span class="k">服务端最新</span><span class="v" style="text-align:right">v${esc(result.info.versionName)}（#${result.info.versionCode}）</span></div>`
+      + `<div class="kv"><span class="k">本机版本</span><span class="v" style="text-align:right">v${esc(result.cur.name)}（#${result.cur.code}）</span></div>`
+      + `<p class="hint" style="margin-top:8px">两者相同，所以判定为最新版。</p>`
+    : `<p class="hint" style="margin-top:8px">所有更新源都读取失败，无法判断是否有新版。</p>`;
+  sheet({
+    title: '检查更新',
+    body: `<div class="kv"><span class="k">本机</span><span class="v" style="text-align:right">v${esc(cur.name)}${cur.code ? '（#' + cur.code + '）' : ''}</span></div>${rows}${tail}`,
+    foot: '<button class="btn primary" data-x="1">知道了</button>',
+  });
+}
 /** 启动时每天自动检查一次（不打扰用户，只有发现新版才提示） */
 export function maybeAutoCheck() {
   if (!window.Android) return;

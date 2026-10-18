@@ -153,7 +153,7 @@ async function createRelease({ code, name, url, size, notes }) {
 /* ---------------- 聚合 ---------------- */
 /* 游戏时长排行（按累计秒数） */
 function gameRank(map) {
-  const GAME_NAME = { mine: '扫雷', g2048: '2048' };
+  const GAME_NAME = { mine: '扫雷', g2048: '2048', snake: '贪吃蛇' };
   const rows = [...(map || new Map()).entries()]
     .sort((x, y) => y[1].seconds - x[1].seconds)
     .map(([k, v]) => [GAME_NAME[k] || k, v]);
@@ -405,6 +405,7 @@ function releaseCardHtml() {
       <div class="a-rel">
         <input type="file" id="relFile" accept=".apk,application/vnd.android.package-archive" />
         <div class="a-muted" id="relApkInfo" style="font-size:12px"></div>
+        <label class="a-muted" style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="relForce" /> 允许版本名与 APK 不一致（仅测试）</label>
         <div class="a-rel-row">
           <label>versionCode <input id="relCode" type="number" min="1" value="${nextCode}" /></label>
           <label>版本名 <input id="relName" type="text" value="${nextName}" /></label>
@@ -493,7 +494,9 @@ async function publishFromForm() {
   if (!name) { msg.textContent = '请填写版本名'; return; }
   const apkVer = fileEl.dataset.apkVersion || '';
   if (!apkVer) { msg.textContent = '无法识别这个 APK 的内部版本，请确认选的是「票据管家-vX.apk」'; return; }
-  if (apkVer !== name) { msg.textContent = `APK 内部版本是 ${apkVer}，和填写的 ${name} 不一致，请检查文件`; return; }
+  const forceEl = main.querySelector('#relForce');
+  const force = !!(forceEl && forceEl.checked);
+  if (!force && apkVer !== name) { msg.textContent = `APK 内部版本是 ${apkVer}，和填写的 ${name} 不一致，请检查文件`; return; }
 
   state.uploading = true;
   btn.disabled = true;
