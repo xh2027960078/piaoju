@@ -1,5 +1,5 @@
-/* 离线缓存：应用外壳优先走本地缓存 */
-const CACHE = 'piaoju-v5';
+/* 离线缓存：应用外壳走本地缓存；配置文件始终走网络 */
+const CACHE = 'piaoju-v6';
 const ASSETS = [
   './',
   './index.html',
@@ -19,7 +19,6 @@ const ASSETS = [
   './js/naming.js',
   './js/pdftext.js',
   './js/appearance.js',
-  './js/config.js',
   './js/telemetry.js',
   './js/assets.js',
   './js/env.js',
@@ -53,6 +52,19 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
+  let path = '';
+  try { path = new URL(req.url).pathname; } catch (err) { path = ''; }
+  // 配置文件随时可能改（填 key）：始终优先网络，取不到再用缓存
+  if (path.endsWith('/js/config.js')) {
+    e.respondWith(
+      fetch(req).then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+        return res;
+      }).catch(() => caches.match(req)),
+    );
+    return;
+  }
   e.respondWith(
     caches.match(req).then((hit) => hit || fetch(req).then((res) => {
       const copy = res.clone();

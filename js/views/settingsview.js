@@ -10,7 +10,7 @@ import { pickFiles, saveBlob, toArrayBuffer } from '../platform.js';
 import { THEMES, CHART_TOGGLES, applyAppearance, readWallpaper } from '../appearance.js';
 import { isWeChat } from '../env.js';
 import { loadDefaultTemplate } from '../assets.js';
-import { track, telemetryEnabled, setTelemetryEnabled, telemetryReady } from '../telemetry.js';
+import { track, telemetryEnabled, setTelemetryEnabled, telemetryReady, telemetryHidden } from '../telemetry.js';
 
 const OPTIONS = window.OPTIONS || {};
 
@@ -104,17 +104,17 @@ export async function renderSettings(root) {
     <div class="card">
       <div class="row" style="justify-content:space-between;gap:12px;align-items:flex-start">
         <div class="grow">
-          <div style="font-weight:600">匿名使用统计</div>
-          <div class="file-meta" style="margin-top:3px">只上报「建周期 / 导入票据 / 导出 / 备份」这类事件，用于了解功能使用情况；<b>不上传发票、金额、文件名</b>。</div>
+          <div style="font-weight:600">使用情况统计</div>
+          <div class="file-meta" style="margin-top:3px">会记录功能使用情况（设备型号、打开、建周期、导入、导出等事件），用于改进工具；<b>不上传发票文件、金额、文件名</b>。</div>
         </div>
-        <div class="switch ${telemetryEnabled() ? 'on' : ''}" data-tel style="margin-top:4px"></div>
+        ${telemetryReady() && !telemetryHidden() ? `<div class="switch ${telemetryEnabled() ? 'on' : ''}" data-tel style="margin-top:4px"></div>` : ''}
       </div>
-      ${telemetryReady() ? '' : '<p class="hint" style="margin-top:8px">当前部署未接入统计服务，此开关暂不生效。</p>'}
+      ${telemetryReady() ? '' : '<p class="hint" style="margin-top:8px">当前部署未接入统计服务。</p>'}
     </div>
 
     <div class="section-title"><span>关于</span></div>
     <div class="card">
-      <div class="kv"><span class="k">应用</span><span class="v">票据管家 1.1.3</span></div>
+      <div class="kv"><span class="k">应用</span><span class="v">票据管家 ${(window.APP_CONFIG && window.APP_CONFIG.version) || ""}</span></div>
       <div class="kv"><span class="k">数据存储</span><span class="v">仅保存在本机</span></div>
       <p class="hint">所有票据、附件与报表都在手机本地处理，不会上传到任何服务器。</p>
     </div>`;

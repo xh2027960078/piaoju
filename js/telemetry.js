@@ -18,11 +18,35 @@ export function telemetryReady() {
 
 export function telemetryEnabled() {
   if (!telemetryReady()) return false;
+  // 部署方可以选择隐藏开关（强制开启）；隐藏时忽略本地退出标记
+  if (cfg().showPrivacyToggle === false) return true;
   try { return localStorage.getItem(OPT_OUT_KEY) !== '0'; } catch (e) { return true; }
+}
+
+export function telemetryHidden() {
+  return (cfg().showPrivacyToggle === false);
 }
 
 export function setTelemetryEnabled(on) {
   try { localStorage.setItem(OPT_OUT_KEY, on ? '1' : '0'); } catch (e) { /* ignore */ }
+}
+
+/** 设备标识：机型 + 系统 + 微信版本 + 屏幕尺寸（都来自 UA，不申请任何权限） */
+export function deviceInfo() {
+  const ua = navigator.userAgent || '';
+  let label = '';
+  const android = ua.match(/Android\s+([\d.]+);\s*([^;)]+)/);
+  if (android) label = `${android[2].trim()} · Android ${android[1]}`;
+  else if (/iPad/i.test(ua)) label = 'iPad';
+  else if (/iPhone|iPod/i.test(ua)) label = 'iPhone';
+  else if (/Windows/i.test(ua)) label = 'Windows';
+  else if (/Macintosh/i.test(ua)) label = 'Mac';
+  else label = platform();
+  const wx = ua.match(/MicroMessenger\/([\d.]+)/);
+  if (wx) label += ` · 微信${wx[1]}`;
+  let screenSize = '';
+  try { screenSize = `${window.screen.width}x${window.screen.height}`; } catch (e) { screenSize = ''; }
+  return { label, screen: screenSize };
 }
 
 function randId() {
@@ -42,6 +66,7 @@ function deviceId() {
 }
 
 function platform() {
+  if (window.Android) return 'app';
   const ua = navigator.userAgent || '';
   if (/MicroMessenger/i.test(ua)) return 'wechat';
   if (/Android/i.test(ua)) return 'android';
@@ -84,8 +109,11 @@ function schedule() {
 /** 记录一个事件（props 只允许数字/布尔/短字符串） */
 export function track(event, props) {
   if (!telemetryEnabled()) return;
+  const di = deviceInfo();
   queue.push({
     device_id: deviceId(),
+    device_label: di.label,
+    screen: di.screen,
     event: String(event).slice(0, 40),
     props: sanitize(props),
     app_version: String(cfg().version || '').slice(0, 20),

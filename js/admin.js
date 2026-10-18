@@ -73,10 +73,12 @@ function aggregate(events) {
 
   for (const e of events) {
     const dev = e.device_id || 'unknown';
-    const rec = devices.get(dev) || { id: dev, count: 0, first: e.created_at, last: e.created_at, platform: e.platform || '-', version: e.app_version || '-', lastEvent: e.event };
+    const rec = devices.get(dev) || { id: dev, count: 0, first: e.created_at, last: e.created_at, platform: e.platform || '-', version: e.app_version || '-', lastEvent: e.event, label: '', screen: '' };
     rec.count++;
     if (e.created_at < rec.first) rec.first = e.created_at;
     if (e.created_at > rec.last) { rec.last = e.created_at; rec.lastEvent = e.event; rec.platform = e.platform || rec.platform; rec.version = e.app_version || rec.version; }
+    if (e.device_label) rec.label = e.device_label;
+    if (e.screen) rec.screen = e.screen;
     devices.set(dev, rec);
 
     byEvent.set(e.event, (byEvent.get(e.event) || 0) + 1);
@@ -162,16 +164,37 @@ function renderDashboard() {
       <span class="a-rank-val">${n}</span>
     </div>`).join('');
 
-  const devRows = a.devices.map((d) => `
-    <tr>
-      <td class="mono" title="${esc(d.id)}">${esc(shortId(d.id))}</td>
+  const propsText = (p) => {
+    if (!p || typeof p !== 'object') return '';
+    return Object.keys(p).map((k) => `${k}=${p[k]}`).join('　');
+  };
+
+  const devRows = a.devices.map((d) => {
+    const mine = state.events.filter((e) => e.device_id === d.id).slice(0, 40);
+    const timeline = mine.map((e) => `
+      <div class="a-tl-item">
+        <span class="a-tl-time">${fmtTime(e.created_at)}</span>
+        <span class="a-tag">${esc(e.event)}</span>
+        <span class="a-tl-props">${esc(propsText(e.props))}</span>
+      </div>`).join('');
+    return `
+    <tr class="a-dev-row" data-dev="${esc(d.id)}" title="点击查看这台设备都做了什么">
+      <td>
+        <div class="a-dev-label">${esc(d.label || '未知机型')}</div>
+        <div class="a-dev-sub mono">${esc(shortId(d.id))}${d.screen ? ' · ' + esc(d.screen) : ''}</div>
+      </td>
       <td>${esc(d.platform)}</td>
       <td>${esc(d.version)}</td>
       <td>${d.count}</td>
       <td class="a-muted">${fmtTime(d.first)}</td>
       <td>${fmtTime(d.last)}</td>
       <td><span class="a-tag">${esc(d.lastEvent)}</span></td>
-    </tr>`).join('');
+    </tr>
+    <tr class="a-dev-detail" hidden><td colspan="7">
+      <div class="a-tl-title">最近 ${mine.length} 条操作</div>
+      <div class="a-tl">${timeline || '<span class="a-muted">暂无记录</span>'}</div>
+    </td></tr>`;
+  }).join('');
 
   main.innerHTML = `
     <div class="a-stats">
@@ -204,7 +227,7 @@ function renderDashboard() {
     </div>
 
     <div class="a-card">
-      <h3>设备明细<span>最新 ${a.devices.length} 台</span></h3>
+      <h3>设备明细<span>点一行展开该设备的操作记录 · 最新 ${a.devices.length} 台</span></h3>
       <div class="a-scroll">
         <table class="a-table">
           <thead><tr><th>设备</th><th>平台</th><th>版本</th><th>事件数</th><th>首次</th><th>最近</th><th>最近事件</th></tr></thead>
@@ -212,6 +235,13 @@ function renderDashboard() {
         </table>
       </div>
     </div>`;
+
+  main.querySelectorAll('.a-dev-row').forEach((row) => {
+    row.addEventListener('click', () => {
+      const next = row.nextElementSibling;
+      if (next && next.classList.contains('a-dev-detail')) next.hidden = !next.hidden;
+    });
+  });
 }
 
 async function refresh() {

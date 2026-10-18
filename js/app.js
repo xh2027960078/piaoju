@@ -128,6 +128,7 @@ export function goBack() {
 export function switchTab(tab) {
   state.tab = tab;
   state.screen = 'tabs';
+  track('page_view', { page: tab });
   document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('is-active', b.dataset.tab === tab));
   window.scrollTo({ top: 0 });
   render();

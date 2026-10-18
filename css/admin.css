@@ -126,3 +126,15 @@ button:disabled { opacity: .5; cursor: default; }
   .a-main { padding: 16px 14px 50px; }
   .a-top { padding: 14px 16px; }
 }
+
+/* 设备行与操作时间线 */
+.a-dev-row { cursor: pointer; }
+.a-dev-row:hover td { background: #f7f9fc; }
+.a-dev-label { font-weight: 600; color: var(--text); }
+.a-dev-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+.a-dev-detail td { background: var(--card-soft); padding: 12px 14px; }
+.a-tl-title { font-size: 12px; color: var(--text-3); font-weight: 600; margin-bottom: 8px; }
+.a-tl { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow: auto; }
+.a-tl-item { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.a-tl-time { color: var(--text-3); font-variant-numeric: tabular-nums; min-width: 78px; }
+.a-tl-props { color: var(--text-2); font-size: 11.5px; }
