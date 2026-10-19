@@ -1,8 +1,8 @@
 {
-    "versionCode":  47,
-    "versionName":  "1.1.43",
-    "url":  "piaoju-1.1.43.apk",
-    "size":  1118414,
-    "notes":  "1. 知乎/百度热榜增加多源并显示失败原因\n2. 天气城市名缺失时显示「当前位置」并尝试反查城市\n3. 热搜点击改用系统浏览器",
+    "versionCode":  50,
+    "versionName":  "1.1.46",
+    "url":  "piaoju-1.1.46.apk",
+    "size":  1135345,
+    "notes":  "1. 导航精简为 首页/全部/设置\n2. 新增工具：格式转换、文档扫描、拼图、做个决定",
     "force":  false
 }

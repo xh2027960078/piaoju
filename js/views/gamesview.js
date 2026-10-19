@@ -1123,9 +1123,12 @@ function renderTetris(root) {
 
   const cv = root.querySelector('#tetrisCanvas');
   const box = root.querySelector('.snake-wrap');
-  const cssW = Math.max(160, Math.min((box && box.clientWidth) || root.clientWidth - 8 || 260, 300));
+  // 画布高度按屏幕可用空间收缩，保证底部按钮不被挤出屏幕
+  const maxW = Math.max(160, Math.min((box && box.clientWidth) || root.clientWidth - 8 || 260, 300));
+  const availH = Math.max(280, (window.innerHeight || 720) - 320);
+  const cssH = Math.min(maxW * (T_ROWS / T_COLS), availH);
+  const cssW = cssH / (T_ROWS / T_COLS);
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const cssH = cssW * (T_ROWS / T_COLS);
   cv.style.width = cssW + 'px';
   cv.style.height = cssH + 'px';
   cv.width = Math.floor(cssW * dpr);

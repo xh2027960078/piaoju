@@ -124,15 +124,34 @@ function showDiag(attempts, result) {
     foot: '<button class="btn primary" data-x="1">知道了</button>',
   });
 }
-/** 启动时每天自动检查一次（不打扰用户，只有发现新版才提示） */
+/**
+ * 自动检查更新：
+ * - 每次启动检查一次（10 分钟内不重复）
+ * - 运行期间每 30 分钟检查一次
+ * - 从后台切回前台时检查（超过 10 分钟才查）
+ * 只有发现更高版本才会弹窗，平时不打扰。
+ */
 export function maybeAutoCheck() {
   if (!window.Android) return;
+
+  const runCheck = (force) => {
+    try {
+      const last = Number(localStorage.getItem(CHECK_KEY) || 0);
+      if (!force && Date.now() - last < 10 * 60 * 1000) return;
+      localStorage.setItem(CHECK_KEY, String(Date.now()));
+    } catch (e) { /* ignore */ }
+    checkForUpdate({ silent: true });
+  };
+
+  setTimeout(() => runCheck(true), 3000);
+  setInterval(() => runCheck(false), 30 * 60 * 1000);
+
   try {
-    const last = Number(localStorage.getItem(CHECK_KEY) || 0);
-    if (Date.now() - last < 24 * 3600 * 1000) return;
-    localStorage.setItem(CHECK_KEY, String(Date.now()));
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') runCheck(false);
+    });
+    window.addEventListener('focus', () => runCheck(false));
   } catch (e) { /* ignore */ }
-  setTimeout(() => checkForUpdate({ silent: true }), 4000);
 }
 
 function showUpdate(info, cur) {

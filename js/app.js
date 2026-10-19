@@ -19,19 +19,32 @@ import { maybeAutoCheck } from './update.js';
 import { renderGames } from './views/gamesview.js';
 /*H5-STRIP-END*/
 import { renderNews } from './views/newsview.js';
+import { renderAll } from './views/allview.js';
+import { renderTools } from './views/toolsview.js';
 import { inspectTemplate } from './xlsx.js';
 import { rowsForTemplate, buildZip, buildReimbursement } from './exporter.js';
 import { periodMenu } from './views/periods.js';
 
 const TABS = {
-  periods: { title: '周期', sub: '' },
-  charts: { title: '图表', sub: '报销花费一览' },
-  export: { title: '导出', sub: '打包 ZIP / 生成报销单' },
-  news: { title: '要闻', sub: '天气 · 微博热搜' },
+  home: { title: '首页', sub: '' },
+  all: { title: '全部', sub: '要闻 · 娱乐 · 工具' },
+  settings: { title: '设置', sub: '默认填写值与数据管理' },
+};
+
+// 首页内的分段（原周期/图表/导出）
+const HOME_SEGS = [
+  { id: 'periods', name: '周期' },
+  { id: 'charts', name: '图表' },
+  { id: 'export', name: '导出' },
+];
+
+// 「全部」里的二级页面
+const PAGES = {
+  news: { title: '要闻', sub: '天气 · 热榜 · 小贴士' },
   /*H5-STRIP-START*/
   games: { title: '娱乐', sub: '小游戏 · 离线可玩' },
   /*H5-STRIP-END*/
-  settings: { title: '设置', sub: '默认填写值与数据管理' },
+  tools: { title: '工具', sub: '格式转换 · 文档扫描 · 拼图 · 决定' },
 };
 
 const viewEl = document.getElementById('view');
@@ -63,17 +76,29 @@ function renderTopbar() {
     return;
   }
 
+  // 二级页面：显示返回按钮
+  if (state.page) {
+    const pg = PAGES[state.page] || { title: '', sub: '' };
+    pageTitle.textContent = pg.title;
+    pageSub.textContent = pg.sub;
+    backBtn.hidden = false;
+    topActions.innerHTML = '';
+    return;
+  }
+
   backBtn.hidden = true;
 
-  const t = TABS[state.tab] || TABS.periods;
+  const t = TABS[state.tab] || TABS.home;
   pageTitle.textContent = t.title;
   let sub = t.sub;
-  if (state.tab === 'periods') {
+  if (state.tab === 'home' && (state.homeSeg || 'periods') === 'periods') {
     const tot = totals();
     sub = state.periods.length
       ? `${tot.periods} 个周期 · ${tot.invoices} 张票据 · 合计 ¥${money(tot.amount, false)}`
       : '按出差周期整理票据，报销不再漏单';
   }
+  if (state.tab === 'home' && state.homeSeg === 'charts') sub = '报销花费一览';
+  if (state.tab === 'home' && state.homeSeg === 'export') sub = '打包 ZIP / 生成报销单';
   pageSub.textContent = sub;
   topActions.innerHTML = '';
   topActions.style.flexDirection = '';
@@ -84,6 +109,11 @@ function syncBackFlag() {
 }
 
 export function render() {
+  // 兼容旧的页签状态（periods/charts/export → 首页分段）
+  if (['periods', 'charts', 'export'].indexOf(state.tab) >= 0) {
+    state.homeSeg = state.tab;
+    state.tab = 'home';
+  }
   renderTopbar();
   syncBackFlag();
   if (state.screen === 'detail') {
@@ -92,26 +122,45 @@ export function render() {
     renderDetail(viewEl);
     return;
   }
-  switch (state.tab) {
-    case 'charts': renderCharts(viewEl); break;
-    case 'export': renderExport(viewEl); break;
-    case 'news': renderNews(viewEl); break;
-    /*H5-STRIP-START*/
-    case 'games': (window.Android ? renderGames(viewEl) : renderPeriods(viewEl)); break;
-    /*H5-STRIP-END*/
-    case 'settings': renderSettings(viewEl); break;
-    case 'periods': renderPeriods(viewEl); break;
-    default:
-      viewEl.innerHTML = '<div class="empty" style="padding:60px 20px"><p>页面脚本不完整，缺少「' + state.tab + '」页</p><p style="font-size:12px">请强制刷新，或重新上传网页文件</p></div>';
-      break;
+  // 二级页面（要闻 / 娱乐 / 工具）
+  if (state.page) {
+    switch (state.page) {
+      case 'news': renderNews(viewEl); break;
+      /*H5-STRIP-START*/
+      case 'games': renderGames(viewEl); break;
+      /*H5-STRIP-END*/
+      case 'tools': renderTools(viewEl); break;
+      default: viewEl.innerHTML = '<div class="empty">页面不存在</div>'; break;
+    }
+    renderFab();
+    return;
   }
+
+  if (state.tab === 'all') { renderAll(viewEl); renderFab(); return; }
+  if (state.tab === 'settings') { renderSettings(viewEl); renderFab(); return; }
+
+  // 首页：周期 / 图表 / 导出 分段
+  const seg = state.homeSeg || 'periods';
+  viewEl.innerHTML = `
+    <div class="home-seg">
+      ${HOME_SEGS.map((s) => `<button class="seg-btn ${s.id === seg ? 'on' : ''}" data-seg="${s.id}">${s.name}</button>`).join('')}
+    </div>
+    <div id="homeBody"></div>`;
+  const body = viewEl.querySelector('#homeBody');
+  viewEl.querySelectorAll('[data-seg]').forEach((b) => b.addEventListener('click', () => {
+    state.homeSeg = b.dataset.seg;
+    render();
+  }));
+  if (seg === 'charts') renderCharts(body);
+  else if (seg === 'export') renderExport(body);
+  else renderPeriods(body);
   renderFab();
 }
 
 function renderFab() {
   const old = document.querySelector('.fab');
   if (old) old.remove();
-  if (state.screen === 'detail' || state.tab !== 'periods') return;
+  if (state.screen === 'detail' || state.page || state.tab !== 'home' || (state.homeSeg || 'periods') !== 'periods') return;
   const fab = document.createElement('button');
   fab.className = 'fab';
   fab.setAttribute('aria-label', '新建周期');
@@ -142,10 +191,8 @@ export function goBack() {
 }
 
 export function switchTab(tab) {
-  /*H5-STRIP-START*/
-  if (tab === 'games' && !window.Android) tab = 'periods';
-  /*H5-STRIP-END*/
   state.tab = tab;
+  state.page = '';
   state.screen = 'tabs';
   track('page_view', { page: tab });
   document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('is-active', b.dataset.tab === tab));
@@ -191,6 +238,7 @@ async function init() {
       history.pushState({ guard: 1 }, '');
       return;
     }
+    if (state.page) { state.page = ''; render(); history.pushState({ guard: 1 }, ''); return; }
     if (state.screen === 'detail') goBack();
     history.pushState({ guard: 1 }, '');
   });
