@@ -170,6 +170,18 @@ function renderFab() {
 }
 
 export function goBack() {
+  // 工具内页 → 工具列表
+  if (state.tool) {
+    state.tool = '';
+    render();
+    return true;
+  }
+  // 二级页面 → 返回「全部」
+  if (state.page) {
+    state.page = '';
+    render();
+    return true;
+  }
   if (state.screen === 'detail') {
     // 金额未填时不允许离开当前周期
     const miss = missingRows(state.periodId);

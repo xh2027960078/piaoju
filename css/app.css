@@ -1199,3 +1199,22 @@ body.has-wallpaper .stat {
 #wheelCanvas { width: min(78vw, 320px); height: min(78vw, 320px); }
 .wheel-result { text-align: center; padding: 18px 0; }
 .wheel-result span { font-size: 26px; font-weight: 800; color: var(--primary); }
+/* 全部：折叠面板 */
+.all-block { display: flex; flex-direction: column; }
+.all-caret {
+  width: 18px; height: 18px; flex: none;
+  stroke: var(--text-3, #8b95a9); fill: none; stroke-width: 2;
+  transition: transform .2s ease;
+}
+.all-caret.is-open { transform: rotate(180deg); stroke: var(--primary); }
+.all-panel {
+  margin: 4px 0 8px;
+  padding: 12px 12px 4px;
+  border-radius: 0 0 16px 16px;
+  background: var(--card-soft);
+  animation: panel-in .18s ease;
+}
+@keyframes panel-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.all-panel .tool-page { gap: 12px; }
+.all-panel .news-wrap { gap: 12px; }
+.all-panel .news-card { box-shadow: none; background: var(--card); }

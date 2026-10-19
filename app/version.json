@@ -1,8 +1,8 @@
 {
-    "versionCode":  50,
-    "versionName":  "1.1.46",
-    "url":  "piaoju-1.1.46.apk",
-    "size":  1135345,
-    "notes":  "1. 导航精简为 首页/全部/设置\n2. 新增工具：格式转换、文档扫描、拼图、做个决定",
+    "versionCode":  53,
+    "versionName":  "1.1.49",
+    "url":  "piaoju-1.1.49.apk",
+    "size":  1139515,
+    "notes":  "1. 文档扫描重做：自动找纸张边缘、透视矫正、智能增强/灰度/黑白\n2. 扫描结果可点开预览",
     "force":  false
 }

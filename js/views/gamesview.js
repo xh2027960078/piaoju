@@ -143,6 +143,14 @@ if (typeof document !== 'undefined') {
 }
 
 /* ---------------- 菜单 ---------------- */
+export function resetGames() {
+  try { clearInterval(snakeTimer); } catch (e) { /* ignore */ }
+  try { clearInterval(tetrisTimer); } catch (e) { /* ignore */ }
+  snakeTimer = null;
+  tetrisTimer = null;
+  screen = 'menu';
+}
+
 export function renderGames(root) {
   if (screen !== 'mine') { clearInterval(mineTimer); mineTimer = null; }
   if (screen !== 'snake') { clearInterval(snakeTimer); snakeTimer = null; }

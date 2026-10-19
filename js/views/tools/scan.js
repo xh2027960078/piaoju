@@ -1,9 +1,17 @@
-/* 工具：文档扫描 —— 拍照/选图 → 增强 → 合成 PDF */
+/* 工具：文档扫描 —— 自动找边、透视矫正、增强，多页合成 PDF */
 import { toast, sheet } from '../../ui.js';
 import { saveBlob, shareBlob } from '../../platform.js';
 import { buildPdfFromJpegs } from '../../lib/pdflite.js';
+import { scanDocument } from '../../lib/scanner.js';
 
-let st = { pages: [], mode: 'gray', busy: false };
+const MODES = [
+  { id: 'auto', name: '智能增强' },
+  { id: 'gray', name: '灰度' },
+  { id: 'bw', name: '黑白文档' },
+  { id: 'color', name: '彩色原样' },
+];
+
+let st = { pages: [], mode: 'auto', busy: false };
 
 function loadImage(file) {
   return new Promise((resolve, reject) => {
@@ -23,28 +31,22 @@ function dataUrlToBytes(dataUrl) {
   return out;
 }
 
-/** 扫描增强：灰度 + 对比度提升 + 压到合适宽度 */
-async function enhance(file, mode) {
-  const img = await loadImage(file);
-  const maxW = 1600;
-  const scale = Math.min(1, maxW / img.naturalWidth);
-  const w = Math.round(img.naturalWidth * scale);
-  const h = Math.round(img.naturalHeight * scale);
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  if (mode === 'gray') ctx.filter = 'grayscale(1) contrast(1.35) brightness(1.06)';
-  else if (mode === 'bw') ctx.filter = 'grayscale(1) contrast(1.9) brightness(1.12)';
-  ctx.drawImage(img, 0, 0, w, h);
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.86);
+function toPage(img, mode) {
+  const r = scanDocument(img, mode, 1600);
+  const dataUrl = r.canvas.toDataURL('image/jpeg', 0.88);
+  const thumbCanvas = document.createElement('canvas');
+  const k = 260 / Math.max(r.canvas.width, r.canvas.height);
+  thumbCanvas.width = Math.round(r.canvas.width * k);
+  thumbCanvas.height = Math.round(r.canvas.height * k);
+  thumbCanvas.getContext('2d').drawImage(r.canvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
   return {
-    name: file.name || 'scan.jpg',
-    thumb: canvas.toDataURL('image/jpeg', 0.4),
     dataUrl,
     bytes: dataUrlToBytes(dataUrl),
-    width: w,
-    height: h,
+    width: r.canvas.width,
+    height: r.canvas.height,
+    thumb: thumbCanvas.toDataURL('image/jpeg', 0.6),
+    found: r.found,
+    img,
   };
 }
 
@@ -59,26 +61,24 @@ export function renderScan(root, back) {
 
       <div class="tool-card">
         <div class="tool-row">
-          <span class="tool-label">增强模式</span>
+          <span class="tool-label">处理方式</span>
           <div class="tool-seg">
-            <button class="seg-btn ${st.mode === 'gray' ? 'on' : ''}" data-mode="gray">灰度高对比</button>
-            <button class="seg-btn ${st.mode === 'bw' ? 'on' : ''}" data-mode="bw">黑白文档</button>
-            <button class="seg-btn ${st.mode === 'none' ? 'on' : ''}" data-mode="none">不处理</button>
+            ${MODES.map((m) => `<button class="seg-btn ${st.mode === m.id ? 'on' : ''}" data-mode="${m.id}">${m.name}</button>`).join('')}
           </div>
         </div>
         <div class="tool-actions">
-          <button class="btn primary" data-camera>拍照扫描</button>
-          <button class="btn ghost" data-pick>从相册选</button>
+          <button class="btn primary" data-camera ${st.busy ? 'disabled' : ''}>拍照扫描</button>
+          <button class="btn ghost" data-pick ${st.busy ? 'disabled' : ''}>从相册选</button>
         </div>
         <input type="file" accept="image/*" capture="environment" hidden data-cam />
         <input type="file" accept="image/*" multiple hidden data-file />
-        <p class="hint">连续拍多页会自动合成一个 PDF；单页最长边压到 1600px，清晰度和体积兼顾。</p>
+        <p class="hint">自动识别纸张边缘并矫正倾斜；识别不到时整张保留。长边压到 1600px。</p>
       </div>
 
       <div class="scan-grid" data-grid></div>
       ${pages.length ? `
         <div class="tool-foot">
-          <span>共 ${pages.length} 页</span>
+          <span>共 ${pages.length} 页${pages.some((p) => p.found === false) ? ' · 有页面未识别到边缘' : ''}</span>
           <div class="tool-foot-actions">
             <button class="btn ghost small" data-clear>清空</button>
             <button class="btn primary small" data-share>转发 PDF</button>
@@ -88,37 +88,63 @@ export function renderScan(root, back) {
     </div>`;
 
   const grid = root.querySelector('[data-grid]');
-  const paint = () => {
-    grid.innerHTML = pages.map((p, i) => `
-      <div class="scan-item">
-        <img src="${p.thumb}" alt="第${i + 1}页" />
-        <span class="scan-idx">${i + 1}</span>
-        <button class="scan-del" data-del="${i}" aria-label="删除">×</button>
-      </div>`).join('');
-    grid.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => {
-      pages.splice(Number(b.dataset.del), 1);
-      renderScan(root, back);
-    }));
-  };
+  grid.innerHTML = pages.map((p, i) => `
+    <div class="scan-item" data-open="${i}">
+      <img src="${p.thumb}" alt="第${i + 1}页" />
+      <span class="scan-idx">${i + 1}${p.found ? '' : ' · 原图'}</span>
+      <button class="scan-del" data-del="${i}" aria-label="删除">×</button>
+    </div>`).join('');
+
+  grid.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    pages.splice(Number(b.dataset.del), 1);
+    renderScan(root, back);
+  }));
+
+  grid.querySelectorAll('[data-open]').forEach((el) => el.addEventListener('click', () => {
+    const p = pages[Number(el.dataset.open)];
+    if (!p) return;
+    sheet({
+      title: '第 ' + (Number(el.dataset.open) + 1) + ' 页',
+      body: `<img src="${p.dataUrl}" style="width:100%;border-radius:12px;display:block" alt="扫描页" />
+        <p class="hint" style="margin-top:8px">${p.found ? '已自动识别纸张边缘并矫正' : '未识别到明显边缘，已保留整张图片'}</p>`,
+      foot: '<button class="btn primary" data-x="1">关闭</button>',
+    });
+  }));
 
   root.querySelector('[data-back]').addEventListener('click', back);
   root.querySelector('[data-camera]').addEventListener('click', () => root.querySelector('[data-cam]').click());
   root.querySelector('[data-pick]').addEventListener('click', () => root.querySelector('[data-file]').click());
-  root.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => {
+
+  root.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', async () => {
     st.mode = b.dataset.mode;
+    if (!pages.length) { renderScan(root, back); return; }
+    st.busy = true;
+    toast('正在重新处理 ' + pages.length + ' 页…');
+    for (const p of pages) {
+      try {
+        const np = toPage(p.img, st.mode);
+        p.dataUrl = np.dataUrl; p.bytes = np.bytes; p.thumb = np.thumb; p.found = np.found;
+        p.width = np.width; p.height = np.height;
+      } catch (e) { /* 跳过失败页 */ }
+    }
+    st.busy = false;
     renderScan(root, back);
   }));
 
   const addFiles = async (files) => {
     if (!files.length) return;
-    toast('正在处理 ' + files.length + ' 页…');
+    st.busy = true;
+    toast('正在扫描 ' + files.length + ' 页…');
     for (const f of files) {
       try {
-        pages.push(await enhance(f, st.mode));
+        const img = await loadImage(f);
+        pages.push(toPage(img, st.mode));
       } catch (e) {
         toast('处理失败：' + e.message, 'err');
       }
     }
+    st.busy = false;
     renderScan(root, back);
   };
 
@@ -154,6 +180,4 @@ export function renderScan(root, back) {
     if (r && r.ok) toast('已发送', 'ok');
     else toast('转发失败', 'err');
   });
-
-  paint();
 }
