@@ -87,7 +87,7 @@ async function scanPage(img, opts) {
       return r;
     } catch (e) {
       console.warn('原生扫描失败，改用内置：', e && e.message);
-      toast('原生引擎失败：' + (e && e.message ? e.message : '未知'), 'err');
+      if (!opts.silent) toast('原生引擎失败：' + (e && e.message ? e.message : '未知'), 'err');
     }
   }
   return scanDocumentAsync(img, Object.assign({}, opts, { onProgress }));
@@ -98,8 +98,9 @@ async function toPage(img, mode, quad) {
   let r;
   try {
     r = await scanPage(img, { mode, quad: quad || null, maxOut: 1600 });
-  } finally {
-    /* 收进度条放在调用方，这里先不关，方便看到后续阶段 */
+  } catch (err) {
+    hideProgress();          // 失败必须收进度条，否则遮罩挡住按钮，弹层无法关闭
+    throw err;
   }
 
   showProgress('编码图片', 97);
@@ -116,6 +117,8 @@ async function toPage(img, mode, quad) {
   showProgress('刷新列表', 99);
   await yieldFrame();
   return {
+    mode,
+    usedQuad: !!(quad && quad.length === 4),
     dataUrl,
     bytes: dataUrlToBytes(dataUrl),
     width: r.canvas.width,
@@ -151,6 +154,7 @@ export function renderScan(root, back) {
         <input type="file" accept="image/*" multiple hidden data-file />
         <p class="hint">自动识别纸张边缘并矫正倾斜；识别不到时整张保留。</p>
         <p class="hint" data-engine style="margin-top:4px"></p>
+        <p class="hint" data-dbg hidden style="margin-top:2px;font-size:11px;color:#9ca3af;word-break:break-all"></p>
         <div class="model-dl" data-model-dl hidden style="margin-top:8px;padding:10px 12px;border:1px solid var(--line,#e5e7eb);border-radius:10px;background:var(--bg,#fafafa)">
           <div style="font-size:13px;color:#374151">去弯曲模型未下载（28 MB，仅需一次）</div>
           <div class="hint" data-dl-hint style="margin:4px 0 8px">下载后可自动抹平纸面弯曲，线条更平直；不下载也可正常扫描。</div>
@@ -210,7 +214,8 @@ export function renderScan(root, back) {
     sheet({
       title: '第 ' + (Number(el.dataset.open) + 1) + ' 页',
       body: `<img src="${p.dataUrl}" style="width:100%;border-radius:12px;display:block" alt="扫描页" />
-        <p class="hint" style="margin-top:8px">${p.found ? '已自动识别纸张边缘并矫正' : '未识别到明显边缘，已保留整张图片'}</p>`,
+        <p class="hint" style="margin-top:8px">${p.found ? '已按四角矫正' : '未使用四角：保留整张图片'}</p>
+        <p class="hint" data-page-dbg style="font-size:11px;color:#9ca3af;word-break:break-all">诊断：v${(nativeVersion().split('|')[0] || '?')}　四角 ${p.found ? '有' : '无'}　模式 ${p.mode || st.mode}</p>`,
       foot: '<button class="btn primary" data-x="1">关闭</button>',
     });
   }));
@@ -218,7 +223,7 @@ export function renderScan(root, back) {
   const engNote = root.querySelector('[data-engine]');
   if (engNote) {
     const v = nativeAvailable() ? nativeVersion() : '';
-    const ortPart = (v.split('| ORT:')[1] || '').trim();
+    const ortPart = (v.split('| ORT:')[1] || '').split('(')[0].trim();
     const aiPart = (v.split('| AI:')[1] || '').trim();
     const chk = (s, key) => (s && s.includes(key) ? '✓' : '✗');
     const ortOk = chk(ortPart, 'corner');
@@ -231,8 +236,16 @@ export function renderScan(root, back) {
     const dlBox = root.querySelector('[data-model-dl]');
     if (dlBox && nativeAvailable()) {
       const bridge = window.Android;
-      let missing = false;
-      try { missing = bridge && bridge.modelExists && !bridge.modelExists('docscanner.onnx'); } catch (e) { missing = false; }
+      let state = 'unknown';
+      let info = '';
+      try { if (bridge.modelInfo) { const raw = String(bridge.modelInfo() || ''); state = raw.split('|')[0] || 'unknown'; info = raw; } } catch (e) { }
+      // 界面诊断行：出错时用户截图即可定位
+      const dbg = root.querySelector('[data-dbg]');
+      if (dbg) {
+        dbg.textContent = '诊断：模型 ' + state + '　' + info + '　版本 ' + (v.split('|')[0] || '');
+        dbg.hidden = false;
+      }
+      const missing = state !== 'ready';
       dlBox.hidden = !missing;
       if (missing) {
         const btn = dlBox.querySelector('[data-dl-start]');
@@ -293,7 +306,7 @@ export function renderScan(root, back) {
       try {
         const img = await loadImage(f);
         showProgress('检测纸张边缘', 5);
-        const probe = await scanPage(img, { mode: 'original', maxOut: 1200 });
+        const probe = await scanPage(img, { mode: 'original', maxOut: 1200, silent: true });
       
         const first = probe;
         let detected = first.found ? first.quad : null;

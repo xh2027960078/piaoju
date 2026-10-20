@@ -13,6 +13,15 @@ import { loadDefaultTemplate } from '../assets.js';
 import { checkForUpdate, currentVersion } from '../update.js';
 import { track, telemetryEnabled, setTelemetryEnabled, telemetryReady, telemetryHidden } from '../telemetry.js';
 
+/* 安卓 App 安装包地址：优先用发布记录，其次用配置里的固定地址 */
+function apkUrl() {
+  const cfg = window.APP_CONFIG || {};
+  const base = cfg.supabaseUrl || '';
+  const rel = (state.releases && state.releases[0]) || null;
+  if (rel && rel.url) return rel.url;
+  if (cfg.apkUrl) return cfg.apkUrl;
+  return base ? `${base}/storage/v1/object/public/app/piaoju-${(cfg.version || '')}.apk` : '#';
+}
 const OPTIONS = window.OPTIONS || {};
 
 const PROFILE_FIELDS = [
@@ -131,6 +140,18 @@ export async function renderSettings(root) {
       ${telemetryReady() ? '' : '<p class="hint" style="margin-top:8px">当前部署未接入统计服务。</p>'}
     </div>
 
+    <div class="section-title"><span>安卓 App</span></div>
+    <div class="card">
+      <div style="font-weight:600">票据管家 App</div>
+      <div class="file-meta" style="margin-top:3px">同一套数据，手机上可拍照扫描、离线处理，不经过服务器。点下面的按钮下载安装包。</div>
+      <div class="btn-row" style="margin-top:10px">
+        <a class="btn primary" data-apk-link href="${esc(apkUrl())}" target="_blank" rel="noopener">下载 App 安装包</a>
+      </div>
+      <div class="kv" style="margin-top:8px"><span class="k">版本</span><span class="v" data-apk-ver>获取中…</span></div>
+      <div class="kv"><span class="k">大小</span><span class="v" data-apk-size>—</span></div>
+      <p class="hint" style="margin-top:6px">安装时若提示「未知来源」，选择允许即可。已装旧版会直接覆盖升级，数据不受影响。</p>
+    </div>
+
     <div class="section-title"><span>关于</span></div>
     <div class="card">
       <div class="kv"><span class="k">应用</span><span class="v">票据管家 ${currentVersion().name || ""}</span></div>
@@ -138,6 +159,25 @@ export async function renderSettings(root) {
       <div class="kv"><span class="k">数据存储</span><span class="v">仅保存在本机</span></div>
       <p class="hint">所有票据、附件与报表都在手机本地处理，不会上传到任何服务器。</p>
     </div>`;
+
+  // 异步取最新发布信息，补上版本与大小（拿不到就留占位）
+  (async () => {
+    try {
+      const verEl = root.querySelector('[data-apk-ver]');
+      const sizeEl = root.querySelector('[data-apk-size]');
+      const linkEl = root.querySelector('[data-apk-link]');
+      const cfg = window.APP_CONFIG || {};
+      if (!cfg.releaseApi) return;
+      const res = await fetch(cfg.releaseApi, { headers: cfg.supabaseAnonKey ? { apikey: cfg.supabaseAnonKey } : {} });
+      if (!res.ok) return;
+      const rows = await res.json();
+      const r = rows && rows[0];
+      if (!r) return;
+      if (verEl) verEl.textContent = 'v' + (r.version_name || '') + '（#' + r.version_code + '）';
+      if (sizeEl) sizeEl.textContent = r.size ? fmtBytes(r.size) : '—';
+      if (linkEl && r.url) linkEl.setAttribute('href', r.url);
+    } catch (e) { /* 忽略 */ }
+  })();
 
   root.querySelectorAll('[data-f]').forEach((el) => {
     el.addEventListener('change', async () => {

@@ -34,7 +34,10 @@ export function editCorners(img, initial, onDone) {
 
       const cv = root.querySelector('#cornerCanvas');
       const wrap = root.querySelector('.corner-wrap');
-      const maxW = Math.min((wrap.clientWidth || 320) - 0, 420);
+      // 弹层刚插入时布局可能还没算好，clientWidth 会是 0 → 画布退化成 0×0，拖不动
+      let ww = wrap ? wrap.clientWidth : 0;
+      if (!ww) ww = Math.min((window.innerWidth || 360) - 32, 420);
+      const maxW = Math.min(ww, 420);
       const maxH = Math.max(260, (window.innerHeight || 720) * 0.5);
       const scale = Math.min(maxW / iw, maxH / ih, 1);
       const dw = Math.round(iw * scale);

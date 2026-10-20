@@ -84,8 +84,8 @@ function canvasToJpegBlob(canvas, quality) {
 
 /** 把 img 画到 canvas（限制最大边），返回 canvas */
 function normalizeCanvas(img, maxSide) {
-  const iw = img.naturalWidth;
-  const ih = img.naturalHeight;
+  const iw = img.naturalWidth || img.width || 1;
+  const ih = img.naturalHeight || img.height || 1;
   const k = Math.min(1, maxSide / Math.max(iw, ih));
   const cv = document.createElement('canvas');
   cv.width = Math.round(iw * k);
@@ -109,18 +109,22 @@ export async function scanNativeFile(img, opts) {
   const inName = 'src-' + Date.now() + '-' + Math.floor(Math.random() * 1000) + '.jpg';
   await writeToCache(blob, inName);
 
-  const iw = img.naturalWidth || 1;
-  const ih = img.naturalHeight || 1;
-  const corners = opts.quad && opts.quad.length === 4
-    ? JSON.stringify(opts.quad.map(([x, y]) => [Number((x / iw).toFixed(5)), Number((y / ih).toFixed(5))]))
-    : 'null';
+  // naturalWidth 在图片未解码完成时是 0，会让坐标变成 Infinity → JSON 变 null → 原生认为"没有四角"
+  const iw = img.naturalWidth || img.width || 0;
+  const ih = img.naturalHeight || img.height || 0;
+  let corners = 'null';
+  if (opts.quad && opts.quad.length === 4 && iw > 0 && ih > 0) {
+    const norm = opts.quad.map(([x, y]) => [Number((x / iw).toFixed(5)), Number((y / ih).toFixed(5))]);
+    const bad = norm.some(([a, b]) => !Number.isFinite(a) || !Number.isFinite(b) || a < -0.5 || a > 1.5 || b < -0.5 || b > 1.5);
+    if (!bad) corners = JSON.stringify(norm);
+  }
 
   const id = String(++seq);
   const json = await new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       pending.delete(id);
-      reject(new Error('原生扫描超时（15 秒）'));
-    }, 15000);
+      reject(new Error('处理超时（60 秒），请重试'));
+    }, 60000);
     pending.set(id, {
       resolve: (r) => { clearTimeout(timer); resolve(r); },
       reject: (e) => { clearTimeout(timer); reject(e); },
