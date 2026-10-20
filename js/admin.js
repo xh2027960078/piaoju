@@ -606,8 +606,22 @@ async function refresh() {
     state.error = '';
     renderDashboard();
   } catch (e) {
-    if (!token()) { renderLogin(e.message); }
-    else { main.innerHTML = `<div class="a-empty">${esc(e.message)}</div>`; }
+    const msg = String((e && e.message) || '');
+    const authIssue = /登录已过期|Unauthorized|401|403/.test(msg);
+    if (!token() || authIssue) {
+      setToken('');
+      setRefresh('');
+      renderLogin(authIssue ? '登录已过期，请重新登录' : msg);
+    } else {
+      main.innerHTML = `<div class="a-empty">${esc(msg)}
+        <div style="margin-top:12px"><button class="primary" id="btnRetry">重试</button>
+        <button id="btnRelogin" style="margin-left:8px">重新登录</button></div>
+      </div>`;
+      const r1 = document.getElementById('btnRetry');
+      if (r1) r1.addEventListener('click', () => refresh());
+      const r2 = document.getElementById('btnRelogin');
+      if (r2) r2.addEventListener('click', () => { setToken(''); setRefresh(''); renderLogin(); });
+    }
   } finally {
     state.loading = false;
   }

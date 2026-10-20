@@ -3,8 +3,8 @@ import { toast, sheet } from '../../ui.js';
 import { saveBlob, shareBlob } from '../../platform.js';
 import { buildPdfFromJpegs } from '../../lib/pdflite.js';
 import { scanDocument, scanDocumentAsync } from '../../lib/scanner.js';
-import { cvScanInWorker, warmupWorkerEngine, workerAvailable } from '../../lib/cvscan-worker-client.js';
 import { editCorners } from './corners.js';
+import { nativeAvailable, nativeVersion, scanNativeFile } from '../../lib/scannative.js';
 
 const MODES = [
   { id: 'original', name: '原图' },
@@ -16,11 +16,11 @@ const MODES = [
 
 let st = { pages: [], mode: 'auto', busy: false };
 
-/** 处理进度浮层：避免看起来像卡死 */
-let progressClosed = false;
+let progressSession = 0;
+let progressTick = null;
 
-function showProgress(label, pct) {
-  if (progressClosed) return;
+function showProgress(label, pct, session) {
+  if (session !== undefined && session !== progressSession) return;
   let el = document.getElementById('scanProgress');
   if (!el) {
     el = document.createElement('div');
@@ -29,17 +29,34 @@ function showProgress(label, pct) {
     el.innerHTML = '<div class="sp-box"><div class="sp-label"></div><div class="sp-bar"><i></i></div></div>';
     document.getElementById('app').appendChild(el);
   }
-  el.querySelector('.sp-label').textContent = `${label} ${Math.round(pct)}%`;
+  el.dataset.label = String(label);
+  el.dataset.pct = String(Math.round(pct));
+  el.dataset.since = String(Date.now());
+  el.querySelector('.sp-label').textContent = label + ' ' + Math.round(pct) + '%';
   el.querySelector('.sp-bar i').style.width = Math.max(4, pct) + '%';
-}
-function hideProgress() {
-  progressClosed = true;
-  const el = document.getElementById('scanProgress');
-  if (el) el.remove();
-  // 下一轮扫描再允许显示
-  setTimeout(() => { progressClosed = false; }, 300);
+
+  if (!progressTick) {
+    progressTick = setInterval(function () {
+      const box = document.getElementById('scanProgress');
+      if (!box) { clearInterval(progressTick); progressTick = null; return; }
+      const since = Number(box.dataset.since || 0);
+      const sec = Math.round((Date.now() - since) / 1000);
+      if (sec >= 12) {
+        hideProgress();
+        try { toast('处理超时，已停止等待（' + (box.dataset.label || '') + '）', 'err'); } catch (e) { /* ignore */ }
+        return;
+      }
+      if (sec >= 2) box.querySelector('.sp-label').textContent = box.dataset.label + ' ' + box.dataset.pct + '%（' + sec + 's）';
+    }, 500);
+  }
 }
 
+function hideProgress() {
+  progressSession += 1;
+  const el = document.getElementById('scanProgress');
+  if (el) el.remove();
+  if (progressTick) { clearInterval(progressTick); progressTick = null; }
+}
 function loadImage(file) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -58,77 +75,46 @@ function dataUrlToBytes(dataUrl) {
   return out;
 }
 
-let engine = '内置';
-let warming = false;
-
-/** 由用户主动触发：在 Web Worker 里加载引擎，主线程不阻塞 */
-function startWarmup(root) {
-  if (warming || engine === 'OpenCV') return;
-  if (!workerAvailable()) {
-    const note = root.querySelector('[data-engine]');
-    if (note) note.textContent = '图像引擎：内置算法（当前环境不支持 Worker）';
-    return;
-  }
-  warming = true;
-  const note = root.querySelector('[data-engine]');
-  const t0 = Date.now();
-
-  const tick = setInterval(() => {
-    if (!warming || !note) return;
-    const sec = Math.round((Date.now() - t0) / 1000);
-    if (sec > 1 && !/解析|准备|就绪/.test(note.textContent)) {
-      note.textContent = `图像引擎：后台加载中 ${sec}s（不影响使用）`;
-    }
-  }, 1000);
-
-  warmupWorkerEngine((pct, label) => {
-    if (note) note.textContent = `图像引擎：${label} ${Math.round(pct)}%`;
-  }).then((hasMat) => {
-    warming = false;
-    clearInterval(tick);
-    if (!hasMat) throw new Error('引擎缺少 cv.Mat');
-    engine = 'OpenCV';
-    if (note) note.textContent = '图像引擎：OpenCV 已就绪';
-  }).catch((e) => {
-    warming = false;
-    clearInterval(tick);
-    engine = '内置';
-    if (note) {
-      note.innerHTML = `图像引擎：内置算法（${(e && e.message) || '引擎不可用'}） <button class="link-btn" data-cvretry="1">重试</button>`;
-      const btn = note.querySelector('[data-cvretry]');
-      if (btn) btn.addEventListener('click', () => startWarmup(root));
-    }
-  });
-}
-
-/** 优先 OpenCV（Worker 里跑），不可用时用内置算法 */
+/** 优先原生 OpenCV（快、准），不可用时退回内置管线 */
 async function scanPage(img, opts) {
   const onProgress = (pct, label) => showProgress(label, pct);
   showProgress('准备', 5);
-  if (engine === 'OpenCV' && workerAvailable()) {
+  if (nativeAvailable() && !opts.forceBuiltin) {
     try {
-      return await cvScanInWorker(img, opts, onProgress);
+      onProgress(35, '原生处理');
+      const r = await scanNativeFile(img, opts);
+      onProgress(96, '生成图像');
+      return r;
     } catch (e) {
-      engine = '内置';
-      console.warn('OpenCV 出错，改用内置算法：', e && e.message);
+      console.warn('原生扫描失败，改用内置：', e && e.message);
+      toast('原生引擎失败：' + (e && e.message ? e.message : '未知'), 'err');
     }
   }
   return scanDocumentAsync(img, Object.assign({}, opts, { onProgress }));
 }
+const yieldFrame = () => new Promise((r) => setTimeout(r, 0));
+
 async function toPage(img, mode, quad) {
   let r;
   try {
     r = await scanPage(img, { mode, quad: quad || null, maxOut: 1600 });
   } finally {
-    hideProgress();
+    /* 收进度条放在调用方，这里先不关，方便看到后续阶段 */
   }
 
+  showProgress('编码图片', 97);
+  await yieldFrame();
   const dataUrl = r.canvas.toDataURL('image/jpeg', 0.88);
+
+  showProgress('生成缩略图', 98);
+  await yieldFrame();
   const thumbCanvas = document.createElement('canvas');
   const k = 260 / Math.max(r.canvas.width, r.canvas.height);
   thumbCanvas.width = Math.round(r.canvas.width * k);
   thumbCanvas.height = Math.round(r.canvas.height * k);
   thumbCanvas.getContext('2d').drawImage(r.canvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
+  showProgress('刷新列表', 99);
+  await yieldFrame();
   return {
     dataUrl,
     bytes: dataUrlToBytes(dataUrl),
@@ -157,15 +143,14 @@ export function renderScan(root, back) {
             ${MODES.map((m) => `<button class="seg-btn ${st.mode === m.id ? 'on' : ''}" data-mode="${m.id}">${m.name}</button>`).join('')}
           </div>
         </div>
-        <button class="btn ghost block" data-cvstart style="margin-bottom:10px">启用 OpenCV 引擎（后台加载，不影响使用）</button>
         <div class="tool-actions">
           <button class="btn primary" data-camera ${st.busy ? 'disabled' : ''}>拍照扫描</button>
           <button class="btn ghost" data-pick ${st.busy ? 'disabled' : ''}>从相册选</button>
         </div>
         <input type="file" accept="image/*" capture="environment" hidden data-cam />
         <input type="file" accept="image/*" multiple hidden data-file />
-        <p class="hint">自动识别纸张边缘并矫正倾斜；识别不到时整张保留。长边压到 1600px。</p>
-        <p class="hint" data-engine style="margin-top:4px">图像引擎：内置算法（可直接使用）</p>
+        <p class="hint">自动识别纸张边缘并矫正倾斜；识别不到时整张保留。</p>
+        <p class="hint" data-engine style="margin-top:4px"></p>
       </div>
 
       <div class="scan-grid" data-grid></div>
@@ -204,6 +189,7 @@ export function renderScan(root, back) {
       try {
         const np = await toPage(p.img, st.mode, q === null ? null : q);
         Object.assign(p, np);
+        hideProgress();
       } catch (err) { toast('重算失败：' + err.message, 'err'); }
     
       renderScan(root, back);
@@ -221,8 +207,12 @@ export function renderScan(root, back) {
     });
   }));
 
-  const cvBtn = root.querySelector('[data-cvstart]');
-  if (cvBtn) cvBtn.addEventListener('click', () => startWarmup(root));
+  const engNote = root.querySelector('[data-engine]');
+  if (engNote) {
+    engNote.textContent = nativeAvailable()
+      ? '引擎：原生 OpenCV ' + nativeVersion()
+      : '引擎：内置算法（原生不可用）';
+  }
 
   root.querySelector('[data-back]').addEventListener('click', back);
   root.querySelector('[data-camera]').addEventListener('click', () => root.querySelector('[data-cam]').click());
@@ -256,12 +246,14 @@ export function renderScan(root, back) {
       
         const first = probe;
         const detected = first.found ? first.quad : null;
+        hideProgress();
         st.busy = false;
         await new Promise((resolve) => {
           editCorners(img, detected, async (q) => {
             try {
               const page = await toPage(img, st.mode, q || detected);
               pages.push(page);
+              hideProgress();
             } catch (err) { toast('生成失败：' + err.message, 'err'); }
           
             resolve();
@@ -269,9 +261,11 @@ export function renderScan(root, back) {
         });
         st.busy = true;
       } catch (e) {
+        hideProgress();
         toast('处理失败：' + e.message, 'err');
       }
     }
+    hideProgress();
     st.busy = false;
     renderScan(root, back);
   };
@@ -300,13 +294,13 @@ export function renderScan(root, back) {
       const b64 = String(dataUrl).split(',')[1] || '';
       zip.file(name, b64, { base64: true });
     };
-    const st = await scanPage(p.img, { mode: st.mode, quad: p.quad, maxOut: 1600, wantStages: true });
+    const st = await scanPage(p.img, { mode: st.mode, quad: p.quad, maxOut: 1600, wantStages: true, forceBuiltin: true });
   
     add('1-原图.jpg', p.img.src || '');
     if (st.stages.rectified) add('2-裁剪矫正.jpg', st.stages.rectified.toDataURL('image/jpeg', 0.92));
     if (st.stages.flattened) add('3-去阴影.jpg', st.stages.flattened.toDataURL('image/jpeg', 0.92));
     add('4-最终效果.jpg', st.canvas.toDataURL('image/jpeg', 0.92));
-    const bw = await scanPage(p.img, { mode: 'bw', quad: p.quad, maxOut: 1600 });
+    const bw = await scanPage(p.img, { mode: 'bw', quad: p.quad, maxOut: 1600, forceBuiltin: true });
     add('5-黑白.jpg', bw.canvas.toDataURL('image/jpeg', 0.92));
     const blob = await zip.generateAsync({ type: 'blob' });
     const r = await saveBlob(blob, '扫描对比-' + Date.now() + '.zip');

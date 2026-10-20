@@ -1,5 +1,5 @@
 /* 工具：拼图 —— 多张图片上下/左右拼接成长图 */
-import { toast } from '../../ui.js';
+import { toast, sheet } from '../../ui.js';
 import { saveBlob } from '../../platform.js';
 
 let st = { dir: 'v', gap: 8, bg: '#ffffff', items: [] };
@@ -49,13 +49,15 @@ export function renderCollage(root, back) {
               <img src="${it.thumb}" alt="" />
               <span>${i + 1}</span>
               <button class="scan-del" data-del="${i}">×</button>
+              <button class="collage-move" data-up="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
+              <button class="collage-move down" data-down="${i}" ${i === items.length - 1 ? 'disabled' : ''}>↓</button>
             </div>`).join('')}
         </div>
         <div class="tool-foot">
           <span>${items.length} 张</span>
           <div class="tool-foot-actions">
             <button class="btn ghost small" data-clear>清空</button>
-            <button class="btn primary small" data-save>生成并保存</button>
+            <button class="btn primary small" data-preview>预览</button>
           </div>
         </div>` : '<p class="hint" style="text-align:center;margin-top:20px">还没有图片</p>'}
     </div>`;
@@ -93,73 +95,142 @@ export function renderCollage(root, back) {
     renderCollage(root, back);
   }));
 
-  const saveBtn = root.querySelector('[data-save]');
-  if (saveBtn) saveBtn.addEventListener('click', async () => {
+  // 拖拽排序（长按拖动缩略图）
+  let dragFrom = -1;
+  let dragEl = null;
+  const itemsEls = [...root.querySelectorAll('.collage-item')];
+  itemsEls.forEach((el, idx) => {
+    el.style.touchAction = 'none';
+    el.addEventListener('pointerdown', (ev) => {
+      if (ev.target.closest('button')) return;
+      dragFrom = idx;
+      dragEl = el;
+      el.classList.add('dragging');
+      el.setPointerCapture(ev.pointerId);
+    });
+    el.addEventListener('pointermove', (ev) => {
+      if (dragFrom < 0 || !dragEl) return;
+      const rect = el.getBoundingClientRect();
+      const dx = ev.clientX - (rect.left + rect.width / 2);
+      const dy = ev.clientY - (rect.top + rect.height / 2);
+      el.style.transform = `translate(${dx}px, ${dy}px)`;
+    });
+    el.addEventListener('pointerup', (ev) => {
+      if (dragFrom < 0) return;
+      const target = document.elementFromPoint(ev.clientX, ev.clientY);
+      const box = target && target.closest('.collage-item');
+      const to = box ? itemsEls.indexOf(box) : dragFrom;
+      dragEl.classList.remove('dragging');
+      dragEl.style.transform = '';
+      dragFrom = -1;
+      dragEl = null;
+      if (to >= 0 && to !== idx) {
+        const moved = items.splice(idx, 1)[0];
+        items.splice(to, 0, moved);
+        renderCollage(root, back);
+      }
+    });
+    el.addEventListener('pointercancel', () => {
+      if (dragEl) { dragEl.classList.remove('dragging'); dragEl.style.transform = ''; }
+      dragFrom = -1;
+      dragEl = null;
+    });
+  });
+  root.querySelectorAll('[data-up]').forEach((b) => b.addEventListener('click', () => {
+    const i = Number(b.dataset.up);
+    if (i > 0) { const t = items[i - 1]; items[i - 1] = items[i]; items[i] = t; renderCollage(root, back); }
+  }));
+  root.querySelectorAll('[data-down]').forEach((b) => b.addEventListener('click', () => {
+    const i = Number(b.dataset.down);
+    if (i < items.length - 1) { const t = items[i + 1]; items[i + 1] = items[i]; items[i] = t; renderCollage(root, back); }
+  }));
+
+  const previewBtn = root.querySelector('[data-preview]');
+  if (previewBtn) previewBtn.addEventListener('click', async () => {
     if (!items.length) { toast('先添加图片', 'err'); return; }
+    previewBtn.disabled = true;
+    previewBtn.textContent = '生成中…';
     try {
-      const blob = await compose();
-      const r = await saveBlob(blob, '拼图-' + Date.now() + '.jpg');
-      if (r && r.ok) toast('已保存拼图', 'ok');
-      else if (!(r && r.canceled)) toast('保存失败：' + ((r && r.error) || '未知错误'), 'err');
+      const blob = await compose(1200);
+      const url = URL.createObjectURL(blob);
+      sheet({
+        title: '预览拼图',
+        body: `<img src="${url}" style="width:100%;border-radius:12px;display:block" alt="拼图预览" />
+          <p class="hint" style="margin-top:8px">${items.length} 张 · 可关闭后调整顺序</p>`,
+        foot: '<button class="btn ghost" data-x="1">返回调整</button><button class="btn primary" data-save-now="1">保存</button>',
+        onMount(el, close) {
+          const saveNow = el.querySelector('[data-save-now]');
+          saveNow.addEventListener('click', async () => {
+            const full = await compose();
+            const r = await saveBlob(full, '拼图-' + Date.now() + '.jpg');
+            if (r && r.ok) { toast('已保存拼图', 'ok'); close(); }
+            else if (!(r && r.canceled)) toast('保存失败：' + ((r && r.error) || '未知错误'), 'err');
+          });
+          const backBtn = el.querySelector('[data-x="1"]');
+          if (backBtn) backBtn.addEventListener('click', (ev) => { ev.preventDefault(); close(); });
+        },
+        onClose() { URL.revokeObjectURL(url); },
+      });
     } catch (e) {
       toast('生成失败：' + e.message, 'err');
+    } finally {
+      previewBtn.disabled = false;
+      previewBtn.textContent = '预览';
     }
   });
 }
 
-async function compose() {
+async function compose(previewMax) {
   const items = st.items;
   const gap = st.gap;
   const dir = st.dir;
 
-  let baseW = 1080;
-  if (dir === 'v') {
-    baseW = Math.min(1080, Math.max(...items.map((i) => 320)));
-  }
-
-  const scaled = items.map((it) => {
-    if (dir === 'v') {
-      const w = baseW;
-      const h = Math.round((it.h / it.w) * baseW);
-      return { ...it, dw: w, dh: h };
-    }
-    const h = baseW;
-    const w = Math.round((it.w / it.h) * baseW);
-    return { ...it, dw: w, dh: h };
-  });
+  // 关键：保持原始分辨率，不缩放、不放大
+  const naturals = items.map((it) => ({ im: it.img, w: it.w, h: it.h }));
 
   let totalW;
   let totalH;
   if (dir === 'v') {
-    totalW = baseW;
-    totalH = scaled.reduce((a, b) => a + b.dh, 0) + gap * (scaled.length - 1);
+    totalW = Math.max(...naturals.map((n) => n.w));
+    totalH = naturals.reduce((a, b) => a + b.h, 0) + gap * (naturals.length - 1);
   } else {
-    totalH = baseW;
-    totalW = scaled.reduce((a, b) => a + b.dw, 0) + gap * (scaled.length - 1);
+    totalH = Math.max(...naturals.map((n) => n.h));
+    totalW = naturals.reduce((a, b) => a + b.w, 0) + gap * (naturals.length - 1);
   }
 
-  const MAX = 8000;
-  const scale = Math.min(1, MAX / Math.max(totalW, totalH));
-  totalW = Math.round(totalW * scale);
-  totalH = Math.round(totalH * scale);
+  // 预览时缩到小尺寸（快），保存时才用原始分辨率
+  const MAX = previewMax || 12000;
+  const k = Math.min(1, MAX / Math.max(totalW, totalH));
+  if (k < 1) {
+    totalW = Math.round(totalW * k);
+    totalH = Math.round(totalH * k);
+  }
 
   const canvas = document.createElement('canvas');
   canvas.width = totalW;
   canvas.height = totalH;
   const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   ctx.fillStyle = st.bg || '#fff';
   ctx.fillRect(0, 0, totalW, totalH);
 
-  let at = 0;
-  for (const it of scaled) {
-    const dw = Math.round(it.dw * scale);
-    const dh = Math.round(it.dh * scale);
-    if (dir === 'v') ctx.drawImage(it.img, 0, at, dw, dh);
-    else ctx.drawImage(it.img, at, 0, dw, dh);
-    at += (dir === 'v' ? dh : dw) + Math.round(gap * scale);
+  let cursor = 0;
+  for (const n of naturals) {
+    const w = Math.round(n.w * k);
+    const h = Math.round(n.h * k);
+    if (dir === 'v') {
+      const x = Math.round((totalW - w) / 2);   // 宽度不一居中，不放大
+      ctx.drawImage(n.im, x, cursor, w, h);
+      cursor += h + Math.round(gap * k);
+    } else {
+      const y = Math.round((totalH - h) / 2);
+      ctx.drawImage(n.im, cursor, y, w, h);
+      cursor += w + Math.round(gap * k);
+    }
   }
 
   return new Promise((resolve, reject) => {
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('画布导出失败'))), 'image/jpeg', 0.92);
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('画布导出失败'))), 'image/jpeg', 0.95);
   });
 }

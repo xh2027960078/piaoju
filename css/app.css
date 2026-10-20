@@ -1245,3 +1245,17 @@ body.has-wallpaper .stat {
 .scan-progress .sp-label { font-size: 12.5px; margin-bottom: 8px; opacity: .92; }
 .scan-progress .sp-bar { height: 4px; border-radius: 2px; background: rgba(255,255,255,.22); overflow: hidden; }
 .scan-progress .sp-bar i { display: block; height: 100%; width: 0; background: #4f8cff; transition: width .18s ease; }
+/* 扫描页：引擎按钮与状态行 */
+.btn.small.block { font-size: 13px; height: 34px; font-weight: 600; }
+[data-engine] { font-size: 11.5px; }
+/* 拼图：顺序调整按钮 */
+.collage-move {
+  position: absolute;
+  left: 4px; top: 4px;
+  width: 20px; height: 20px; border-radius: 10px;
+  border: 0; background: rgba(0,0,0,.55); color: #fff;
+  font-size: 12px; line-height: 1; cursor: pointer;
+}
+.collage-move.down { top: 28px; }
+.collage-move[disabled] { opacity: .3; }
+.collage-item.dragging { opacity: .85; transform: scale(1.06); z-index: 5; box-shadow: 0 8px 24px rgba(0,0,0,.25); }

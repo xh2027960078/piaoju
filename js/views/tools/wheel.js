@@ -11,6 +11,50 @@ let st = {
   result: '',
 };
 
+/* ---------- 音效与震动 ---------- */
+let audioCtx = null;
+function ensureAudio() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (e) { audioCtx = null; }
+  return audioCtx;
+}
+function tick(freq) {
+  const ac = ensureAudio();
+  if (!ac) return;
+  const osc = ac.createOscillator();
+  const gain = ac.createGain();
+  osc.type = 'triangle';
+  osc.frequency.value = freq || 1200;
+  gain.gain.setValueAtTime(0.12, ac.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.06);
+  osc.connect(gain);
+  gain.connect(ac.destination);
+  osc.start();
+  osc.stop(ac.currentTime + 0.07);
+}
+function fanfare() {
+  const ac = ensureAudio();
+  if (!ac) return;
+  [0, 0.12, 0.24].forEach((t, i) => {
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = [660, 880, 1320][i];
+    gain.gain.setValueAtTime(0.001, ac.currentTime + t);
+    gain.gain.exponentialRampToValueAtTime(0.18, ac.currentTime + t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + t + 0.22);
+    osc.connect(gain);
+    gain.connect(ac.destination);
+    osc.start(ac.currentTime + t);
+    osc.stop(ac.currentTime + t + 0.24);
+  });
+}
+function buzz(ms, strong) {
+  try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* ignore */ }
+  try { if (window.Android && window.Android.vibrate) window.Android.vibrate(ms, strong ? 1 : 0); } catch (e) { /* ignore */ }
+}
 function rotateTo(angle) {
   st.angle = angle;
   const cv = document.querySelector('#wheelCanvas');
@@ -52,6 +96,19 @@ function drawWheel(ctx, w, h, angle) {
     ctx.restore();
   }
 
+  // 指针（垂直向上，指向 12 点方向的扇区）
+  const pr = Math.max(12, r * 0.09);
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r + 2);
+  ctx.lineTo(cx - pr * 0.7, cy - r - pr * 1.5);
+  ctx.lineTo(cx + pr * 0.7, cy - r - pr * 1.5);
+  ctx.closePath();
+  ctx.fillStyle = '#ff3b59';
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
   ctx.beginPath();
   ctx.arc(cx, cy, r * 0.16, 0, Math.PI * 2);
   ctx.fillStyle = '#fff';
@@ -78,20 +135,30 @@ function spin(root, back) {
   const endAngle = startAngle + turns * Math.PI * 2 + (targetBase - startAngle % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
   const dur = 3200;
   const t0 = performance.now();
+  let lastSeg = Math.floor(st.angle / arc);
 
-  const tick = (t) => {
+  const animate = (t) => {
     const p = Math.min(1, (t - t0) / dur);
     const ease = 1 - Math.pow(1 - p, 3);
-    rotateTo(startAngle + (endAngle - startAngle) * ease);
+    const angle = startAngle + (endAngle - startAngle) * ease;
+    rotateTo(angle);
+    const seg = Math.floor(angle / arc);
+    if (seg !== lastSeg) {
+      lastSeg = seg;
+      tick(1000 + Math.random() * 400);
+      buzz(8, false);
+    }
     if (p < 1) {
-      requestAnimationFrame(tick);
+      requestAnimationFrame(animate);
     } else {
       st.spinning = false;
       st.result = opts[winner];
+      fanfare();
+      buzz(60, true);
       showResult(opts[winner], root, back);
     }
   };
-  requestAnimationFrame(tick);
+  requestAnimationFrame(animate);
 }
 
 function showResult(text, root, back) {
@@ -103,7 +170,10 @@ function showResult(text, root, back) {
     body: `<div class="wheel-result"><span>${text}</span></div>`,
     foot: `<button class="btn ghost" data-x="1">关闭</button><button class="btn primary" data-again="1">再转一次</button>`,
     onMount(el, close) {
-      el.querySelector('[data-again]').addEventListener('click', () => { close(); spin(root, back); });
+      const again = el.querySelector('[data-again]');
+      if (again) again.addEventListener('click', () => { close(); spin(root, back); });
+      const x = el.querySelector('[data-x="1"]');
+      if (x) x.addEventListener('click', (ev) => { ev.preventDefault(); close(); });
     },
   });
 }

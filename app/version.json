@@ -1,8 +1,8 @@
 {
-    "versionCode":  69,
-    "versionName":  "1.1.65",
-    "url":  "piaoju-1.1.65.apk",
-    "size":  4506900,
-    "notes":  "1. 后台登录支持自动续期，上传不再因令牌过期失败",
+    "versionCode":  83,
+    "versionName":  "1.1.79",
+    "url":  "piaoju-1.1.79.apk",
+    "size":  9827444,
+    "notes":  "1. 后台登录过期时正确回到登录页（之前只显示一句话）\n2. 网络异常时提供重试/重新登录按钮\n3. 扫描检测支持小尺寸文档与复杂背景",
     "force":  false
 }
