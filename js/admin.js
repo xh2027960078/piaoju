@@ -1,58 +1,4 @@
 /* 管理后台：邮箱 + 密码登录 Supabase，读取 events 做聚合展示。
-boot();
-function wireModelUpload() {
-  const fileEl = main.querySelector('#mdlFile');
-  const go = main.querySelector('#mdlGo');
-  const msg = main.querySelector('#mdlMsg');
-  const bar = main.querySelector('#mdlBar');
-  const fill = bar ? bar.querySelector('i') : null;
-  const info = main.querySelector('#mdlInfo');
-  const link = main.querySelector('#mdlLink');
-  const cfg = window.APP_CONFIG || {};
-  const publicUrl = `${cfg.supabaseUrl}/storage/v1/object/public/app/docscanner.onnx`;
-  if (link) link.innerHTML = '公开地址：<code style="word-break:break-all">' + esc(publicUrl) + '</code>';
-  if (!fileEl || !go) return;
-  fileEl.addEventListener('change', () => {
-    const f = fileEl.files && fileEl.files[0];
-    if (!f) { if (info) info.textContent = ''; return; }
-    if (info) info.textContent = '已选择 ' + f.name + '（' + (f.size / 1048576).toFixed(1) + ' MB）';
-  });
-  go.addEventListener('click', async () => {
-    const f = fileEl.files && fileEl.files[0];
-    if (!f) { if (msg) msg.textContent = '请先选择 docscanner.onnx'; return; }
-    go.disabled = true;
-    if (msg) msg.textContent = '上传中…';
-    if (bar) bar.hidden = false;
-    try {
-      const t = await ensureSession(false);
-      const CHUNK = 20 * 1024 * 1024;              // 每片 20MB，稳过 25MB 限制
-      const parts = Math.max(1, Math.ceil(f.size / CHUNK));
-      for (let i = 0; i < parts; i++) {
-        const slice = f.slice(i * CHUNK, Math.min((i + 1) * CHUNK, f.size));
-        const partName = parts === 1 ? 'docscanner.onnx' : 'docscanner.onnx.p' + (i + 1);
-        if (msg) msg.textContent = parts === 1 ? '上传中…' : ('上传中 第 ' + (i + 1) + '/' + parts + ' 片…');
-        await uploadApkOnce(slice, partName, (p) => {
-          const overall = (i + p) / parts;
-          if (fill) fill.style.width = Math.round(overall * 100) + '%';
-          if (msg) msg.textContent = '上传中 ' + Math.round(overall * 100) + '%（第 ' + (i + 1) + '/' + parts + ' 片）';
-        }, t);
-      }
-      if (parts > 1) {
-        const manifest = JSON.stringify({ parts: parts, size: f.size, chunk: CHUNK });
-        await uploadApkOnce(new Blob([manifest], { type: 'application/json' }), 'docscanner.onnx.parts', () => {}, t);
-      }
-      if (msg) msg.textContent = parts === 1 ? '✅ 上传成功，App 首次使用时即可下载' : ('✅ 已分 ' + parts + ' 片上传完成，App 会自动合并');
-      if (fill) fill.style.width = '100%';
-    } catch (e) {
-      if (msg) msg.textContent = '上传失败：' + (e.message || e);
-    } finally {
-      go.disabled = false;
-      setTimeout(() => { if (bar) bar.hidden = true; }, 1200);
-    }
-  });
-}
-
-/* 管理后台：邮箱 + 密码登录 Supabase，读取 events 做聚合展示。
    只读事件（事件名、设备随机 ID、时间、平台、版本），不含任何票据内容。 */
 
 const cfg = window.APP_CONFIG || {};
@@ -547,6 +493,58 @@ function releaseCardHtml() {
         <div class="a-muted" id="mdlLink" style="font-size:12px;margin-top:8px"></div>
       </div>
     </div>`;
+}
+
+function wireModelUpload() {
+  const fileEl = main.querySelector('#mdlFile');
+  const go = main.querySelector('#mdlGo');
+  const msg = main.querySelector('#mdlMsg');
+  const bar = main.querySelector('#mdlBar');
+  const fill = bar ? bar.querySelector('i') : null;
+  const info = main.querySelector('#mdlInfo');
+  const link = main.querySelector('#mdlLink');
+  const cfg = window.APP_CONFIG || {};
+  const publicUrl = `${cfg.supabaseUrl}/storage/v1/object/public/app/docscanner.onnx`;
+  if (link) link.innerHTML = '公开地址：<code style="word-break:break-all">' + esc(publicUrl) + '</code>';
+  if (!fileEl || !go) return;
+  fileEl.addEventListener('change', () => {
+    const f = fileEl.files && fileEl.files[0];
+    if (!f) { if (info) info.textContent = ''; return; }
+    if (info) info.textContent = '已选择 ' + f.name + '（' + (f.size / 1048576).toFixed(1) + ' MB）';
+  });
+  go.addEventListener('click', async () => {
+    const f = fileEl.files && fileEl.files[0];
+    if (!f) { if (msg) msg.textContent = '请先选择 docscanner.onnx'; return; }
+    go.disabled = true;
+    if (msg) msg.textContent = '上传中…';
+    if (bar) bar.hidden = false;
+    try {
+      const t = await ensureSession(false);
+      const CHUNK = 20 * 1024 * 1024;              // 每片 20MB，稳过 25MB 限制
+      const parts = Math.max(1, Math.ceil(f.size / CHUNK));
+      for (let i = 0; i < parts; i++) {
+        const slice = f.slice(i * CHUNK, Math.min((i + 1) * CHUNK, f.size));
+        const partName = parts === 1 ? 'docscanner.onnx' : 'docscanner.onnx.p' + (i + 1);
+        if (msg) msg.textContent = parts === 1 ? '上传中…' : ('上传中 第 ' + (i + 1) + '/' + parts + ' 片…');
+        await uploadApkOnce(slice, partName, (p) => {
+          const overall = (i + p) / parts;
+          if (fill) fill.style.width = Math.round(overall * 100) + '%';
+          if (msg) msg.textContent = '上传中 ' + Math.round(overall * 100) + '%（第 ' + (i + 1) + '/' + parts + ' 片）';
+        }, t);
+      }
+      if (parts > 1) {
+        const manifest = JSON.stringify({ parts: parts, size: f.size, chunk: CHUNK });
+        await uploadApkOnce(new Blob([manifest], { type: 'application/json' }), 'docscanner.onnx.parts', () => {}, t);
+      }
+      if (msg) msg.textContent = parts === 1 ? '✅ 上传成功，App 首次使用时即可下载' : ('✅ 已分 ' + parts + ' 片上传完成，App 会自动合并');
+      if (fill) fill.style.width = '100%';
+    } catch (e) {
+      if (msg) msg.textContent = '上传失败：' + (e.message || e);
+    } finally {
+      go.disabled = false;
+      setTimeout(() => { if (bar) bar.hidden = true; }, 1200);
+    }
+  });
 }
 
 function wireRelease() {
