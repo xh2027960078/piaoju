@@ -844,6 +844,23 @@ export async function scanDocumentAsync(img, opts = {}) {
   return result;
 }
 
+/** 只做检测：返回原图像素坐标的四角（用于角点编辑器重新识别） */
+export function detectQuadOnImage(img, maxDetect = 560) {
+  const iw = img.naturalWidth;
+  const ih = img.naturalHeight;
+  const detW = Math.min(maxDetect, iw);
+  const detH = Math.round((ih / iw) * detW);
+  const det = document.createElement('canvas');
+  det.width = detW;
+  det.height = detH;
+  const dctx = det.getContext('2d');
+  dctx.drawImage(img, 0, 0, detW, detH);
+  const gray = toGray(dctx.getImageData(0, 0, detW, detH).data, detW, detH);
+  const q = detectQuad(gray, detW, detH);
+  if (!q) return null;
+  return q.map(([x, y]) => [Math.round(x * (iw / detW)), Math.round(y * (ih / detH))]);
+}
+
 export function scanDocument(img, opts = {}, progress) {
   const mode = opts.mode || 'auto';
   const maxOut = opts.maxOut || 1800;

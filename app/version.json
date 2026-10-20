@@ -1,8 +1,8 @@
 {
-    "versionCode":  83,
-    "versionName":  "1.1.79",
-    "url":  "piaoju-1.1.79.apk",
-    "size":  9827444,
-    "notes":  "1. 后台登录过期时正确回到登录页（之前只显示一句话）\n2. 网络异常时提供重试/重新登录按钮\n3. 扫描检测支持小尺寸文档与复杂背景",
+    "versionCode":  106,
+    "versionName":  "1.3.0",
+    "url":  "https://pihrlxposrvbifachezg.supabase.co/storage/v1/object/public/app/piaoju-1.3.0.apk",
+    "size":  27174260,
+    "notes":  "1. 模型分片上传/下载，避开 25MB 限制\n2. 管理页新增上传去弯曲模型\n3. H5 包不含 APK",
     "force":  false
 }

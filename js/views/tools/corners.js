@@ -1,5 +1,6 @@
 /* 角点微调：拍照后显示图片与四个角，拖动确认后再矫正 */
-import { sheet } from '../../ui.js';
+import { sheet, toast } from '../../ui.js';
+import { detectQuadOnImage } from '../../lib/scanner.js';
 
 /**
  * @param {HTMLImageElement} img 原图
@@ -16,7 +17,7 @@ export function editCorners(img, initial, onDone) {
   const body = `
     <div class="corner-wrap">
       <canvas id="cornerCanvas"></canvas>
-      <p class="hint" style="text-align:center;margin:8px 0 0"></p>
+      <p class="hint" data-tip style="text-align:center;margin:8px 0 0"></p>
     </div>`;
 
   sheet({
@@ -24,6 +25,13 @@ export function editCorners(img, initial, onDone) {
     body,
     foot: '<button class="btn ghost" data-reset="1">自动识别</button><button class="btn primary" data-ok="1">确定并生成</button>',
     onMount(root, close) {
+      const tipEl = root.querySelector('[data-tip]');
+      if (tipEl) {
+        tipEl.textContent = auto
+          ? '已自动找到纸张边缘，可拖动四个圆点微调'
+          : '未识别到纸张边缘：请把四个圆点拖到纸张的四角';
+      }
+
       const cv = root.querySelector('#cornerCanvas');
       const wrap = root.querySelector('.corner-wrap');
       const maxW = Math.min((wrap.clientWidth || 320) - 0, 420);
@@ -107,9 +115,17 @@ export function editCorners(img, initial, onDone) {
         close();
         onDone(quad.map((p) => [Math.round(p[0]), Math.round(p[1])]));
       });
+      // 自动识别：只更新框，不离开编辑器
       root.querySelector('[data-reset]').addEventListener('click', () => {
-        close();
-        onDone(null); // 交给自动检测
+        const found = detectQuadOnImage(img, 560);
+        if (found && found.length === 4) {
+          quad = found.map((p) => [p[0], p[1]]);
+          draw();
+          const tip = root.querySelector('[data-tip]');
+          if (tip) tip.textContent = '已重新识别，可继续拖动微调';
+        } else {
+          toast('没识别到纸张边缘，请手动拖动四个角', 'err');
+        }
       });
     },
   });

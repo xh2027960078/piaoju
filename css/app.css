@@ -1259,3 +1259,4 @@ body.has-wallpaper .stat {
 .collage-move.down { top: 28px; }
 .collage-move[disabled] { opacity: .3; }
 .collage-item.dragging { opacity: .85; transform: scale(1.06); z-index: 5; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+.scan-rot { position:absolute; right:6px; bottom:6px; width:26px; height:26px; border-radius:13px; border:0; background:rgba(0,0,0,.55); color:#fff; font-size:14px; line-height:1; }

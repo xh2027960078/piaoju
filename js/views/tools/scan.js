@@ -2,7 +2,7 @@
 import { toast, sheet } from '../../ui.js';
 import { saveBlob, shareBlob } from '../../platform.js';
 import { buildPdfFromJpegs } from '../../lib/pdflite.js';
-import { scanDocument, scanDocumentAsync } from '../../lib/scanner.js';
+import { scanDocument, scanDocumentAsync, detectQuadOnImage } from '../../lib/scanner.js';
 import { editCorners } from './corners.js';
 import { nativeAvailable, nativeVersion, scanNativeFile } from '../../lib/scannative.js';
 
@@ -151,6 +151,14 @@ export function renderScan(root, back) {
         <input type="file" accept="image/*" multiple hidden data-file />
         <p class="hint">自动识别纸张边缘并矫正倾斜；识别不到时整张保留。</p>
         <p class="hint" data-engine style="margin-top:4px"></p>
+        <div class="model-dl" data-model-dl hidden style="margin-top:8px;padding:10px 12px;border:1px solid var(--line,#e5e7eb);border-radius:10px;background:var(--bg,#fafafa)">
+          <div style="font-size:13px;color:#374151">去弯曲模型未下载（28 MB，仅需一次）</div>
+          <div class="hint" data-dl-hint style="margin:4px 0 8px">下载后可自动抹平纸面弯曲，线条更平直；不下载也可正常扫描。</div>
+          <div data-dl-bar hidden style="height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;margin-bottom:8px">
+            <div data-dl-fill style="height:100%;width:0;background:#2563eb;transition:width .2s"></div>
+          </div>
+          <button class="btn" data-dl-start style="font-size:13px;padding:6px 14px">立即下载</button>
+        </div>
       </div>
 
       <div class="scan-grid" data-grid></div>
@@ -209,9 +217,52 @@ export function renderScan(root, back) {
 
   const engNote = root.querySelector('[data-engine]');
   if (engNote) {
+    const v = nativeAvailable() ? nativeVersion() : '';
+    const ortPart = (v.split('| ORT:')[1] || '').trim();
+    const aiPart = (v.split('| AI:')[1] || '').trim();
+    const chk = (s, key) => (s && s.includes(key) ? '✓' : '✗');
+    const ortOk = chk(ortPart, 'corner');
+    const devOk = chk(ortPart, 'dewarp');
     engNote.textContent = nativeAvailable()
-      ? '引擎：原生 OpenCV ' + nativeVersion()
+      ? '引擎：OpenCV 4.9 + ORT｜AI找边 ' + ortOk + '　去弯曲 ' + devOk
       : '引擎：内置算法（原生不可用）';
+
+    // 去弯曲模型缺失时提供一次性下载（不阻塞其他功能）
+    const dlBox = root.querySelector('[data-model-dl]');
+    if (dlBox && nativeAvailable()) {
+      const bridge = window.Android;
+      let missing = false;
+      try { missing = bridge && bridge.modelExists && !bridge.modelExists('docscanner.onnx'); } catch (e) { missing = false; }
+      dlBox.hidden = !missing;
+      if (missing) {
+        const btn = dlBox.querySelector('[data-dl-start]');
+        const hint = dlBox.querySelector('[data-dl-hint]');
+        const bar = dlBox.querySelector('[data-dl-bar]');
+        const fill = dlBox.querySelector('[data-dl-fill]');
+        const url = (window.APP_CONFIG && window.APP_CONFIG.modelUrl) || '';
+        btn.addEventListener('click', () => {
+          if (!url) { hint.textContent = '未配置模型下载地址'; return; }
+          btn.disabled = true;
+          bar.hidden = false;
+          hint.textContent = '正在下载 0%';
+          const rid = 'model-' + Date.now();
+          window.__onModelProgress = (id, pct) => { if (id !== rid) return; fill.style.width = pct + '%'; hint.textContent = '正在下载 ' + pct + '%'; };
+          window.__onModelDone = (id, ok, size, err) => {
+            if (id !== rid) return;
+            btn.disabled = false;
+            if (ok) {
+              bar.hidden = true;
+              hint.textContent = '已下载 ' + Math.round(size / 1048576) + ' MB，下次扫描生效';
+              setTimeout(() => { dlBox.hidden = true; renderScan(root, back); }, 1200);
+            } else {
+              bar.hidden = true;
+              hint.textContent = '下载失败：' + (err || '网络错误') + '，可重试';
+            }
+          };
+          bridge.downloadModel(rid, url, 'docscanner.onnx');
+        });
+      }
+    }
   }
 
   root.querySelector('[data-back]').addEventListener('click', back);
@@ -245,7 +296,8 @@ export function renderScan(root, back) {
         const probe = await scanPage(img, { mode: 'original', maxOut: 1200 });
       
         const first = probe;
-        const detected = first.found ? first.quad : null;
+        let detected = first.found ? first.quad : null;
+        // 按用户要求：不再自动裁剪，初始框就是整张图，需要时手动拖动
         hideProgress();
         st.busy = false;
         await new Promise((resolve) => {
