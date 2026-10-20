@@ -1,8 +1,8 @@
 {
-    "versionCode":  53,
-    "versionName":  "1.1.49",
-    "url":  "piaoju-1.1.49.apk",
-    "size":  1139515,
-    "notes":  "1. 文档扫描重做：自动找纸张边缘、透视矫正、智能增强/灰度/黑白\n2. 扫描结果可点开预览",
+    "versionCode":  69,
+    "versionName":  "1.1.65",
+    "url":  "piaoju-1.1.65.apk",
+    "size":  4506900,
+    "notes":  "1. 后台登录支持自动续期，上传不再因令牌过期失败",
     "force":  false
 }

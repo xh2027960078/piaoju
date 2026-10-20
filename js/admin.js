@@ -12,8 +12,53 @@ const subEl = document.getElementById('a-sub');
 
 const state = { events: [], releases: [], loading: false, error: '', uploading: false };
 
-function token() { try { return sessionStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; } }
-function setToken(t) { try { t ? sessionStorage.setItem(TOKEN_KEY, t) : sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* ignore */ } }
+function token() { try { return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; } }
+function setToken(t) { try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch (e) { /* ignore */ } }
+function tokenLegacy() { try { return sessionStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; } }
+
+const REFRESH_KEY = 'pj-admin-refresh';
+function setRefresh(t) { try { t ? localStorage.setItem(REFRESH_KEY, t) : localStorage.removeItem(REFRESH_KEY); } catch (e) { /* ignore */ } }
+function refreshToken() { try { return localStorage.getItem(REFRESH_KEY) || ''; } catch (e) { return ''; } }
+
+/** 解析 JWT 的 exp（秒）；解析失败返回 0 */
+function tokenExp(t) {
+  try {
+    const body = String(t).split('.')[1];
+    const json = atob(body.replace(/-/g, '+').replace(/_/g, '/'));
+    const obj = JSON.parse(json);
+    return Number(obj.exp) || 0;
+  } catch (e) { return 0; }
+}
+
+/** 令牌快过期或已过期时用 refresh_token 续期 */
+let refreshing = null;
+async function ensureSession(force) {
+  const t = token();
+  if (!force && t) {
+    const exp = tokenExp(t);
+    if (!exp || exp * 1000 - Date.now() > 60000) return t;
+  }
+  if (refreshing) return refreshing;
+  const rt = refreshToken();
+  if (!rt) throw new Error('登录已过期，请重新登录');
+  refreshing = (async () => {
+    const res = await fetch(`${cfg.supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { apikey: cfg.supabaseAnonKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: rt }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.access_token) {
+      setToken('');
+      setRefresh('');
+      throw new Error('登录已过期，请重新登录');
+    }
+    setToken(data.access_token);
+    if (data.refresh_token) setRefresh(data.refresh_token);
+    return data.access_token;
+  })();
+  try { return await refreshing; } finally { refreshing = null; }
+}
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -95,23 +140,40 @@ async function fetchReleases() {
   return res.json();
 }
 
-/* 上传 APK 到 Storage 并写入版本记录 */
-function uploadApk(file, name, onProgress) {
+/* 上传 APK 到 Storage：自动续期，401/403 时刷新令牌重试一次 */
+function uploadApkOnce(file, name, onProgress, accessToken) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${cfg.supabaseUrl}/storage/v1/object/app/${encodeURIComponent(name)}`);
     xhr.setRequestHeader('apikey', cfg.supabaseAnonKey);
-    xhr.setRequestHeader('Authorization', `Bearer ${token()}`);
+    xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`);
     xhr.setRequestHeader('x-upsert', 'true');
     xhr.setRequestHeader('Content-Type', file.type || 'application/vnd.android.package-archive');
     xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error(`上传失败（${xhr.status}）${String(xhr.responseText || '').slice(0, 120)}`));
+      else {
+        const err = new Error(`上传失败（${xhr.status}）${String(xhr.responseText || '').slice(0, 140)}`);
+        err.status = xhr.status;
+        reject(err);
+      }
     };
     xhr.onerror = () => reject(new Error('上传失败：网络错误'));
     xhr.send(file);
   });
+}
+
+async function uploadApk(file, name, onProgress) {
+  const t = await ensureSession(false);
+  try {
+    return await uploadApkOnce(file, name, onProgress, t);
+  } catch (e) {
+    if (e.status === 401 || e.status === 403) {
+      const fresh = await ensureSession(true);
+      return uploadApkOnce(file, name, onProgress, fresh);
+    }
+    throw e;
+  }
 }
 
 /* 读取 APK 内部版本（APK 是 zip，里面的 assets/www/js/config.js 有 version） */

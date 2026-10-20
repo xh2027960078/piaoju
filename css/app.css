@@ -1218,3 +1218,30 @@ body.has-wallpaper .stat {
 .all-panel .tool-page { gap: 12px; }
 .all-panel .news-wrap { gap: 12px; }
 .all-panel .news-card { box-shadow: none; background: var(--card); }
+/* 扫描：角点微调 */
+.corner-wrap { display: flex; flex-direction: column; align-items: center; }
+.corner-wrap canvas {
+  display: block;
+  border-radius: 10px;
+  touch-action: none;
+  background: #111;
+}
+.scan-adj {
+  position: absolute; right: 4px; bottom: 4px;
+  width: 22px; height: 22px; border-radius: 11px;
+  border: 0; background: rgba(47,107,255,.85); color: #fff;
+  font-size: 12px; line-height: 1; cursor: pointer;
+}
+/* 扫描处理进度浮层 */
+.scan-progress {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 60;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: rgba(20, 28, 44, .92);
+  backdrop-filter: blur(6px);
+  color: #fff;
+}
+.scan-progress .sp-label { font-size: 12.5px; margin-bottom: 8px; opacity: .92; }
+.scan-progress .sp-bar { height: 4px; border-radius: 2px; background: rgba(255,255,255,.22); overflow: hidden; }
+.scan-progress .sp-bar i { display: block; height: 100%; width: 0; background: #4f8cff; transition: width .18s ease; }
