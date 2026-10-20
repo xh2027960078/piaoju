@@ -1,8 +1,8 @@
 {
-    "versionCode":  106,
-    "versionName":  "1.3.0",
-    "url":  "https://pihrlxposrvbifachezg.supabase.co/storage/v1/object/public/app/piaoju-1.3.0.apk",
+    "versionCode":  107,
+    "versionName":  "1.3.1",
+    "url":  "https://pihrlxposrvbifachezg.supabase.co/storage/v1/object/public/app/piaoju-1.3.1.apk",
     "size":  27174260,
-    "notes":  "1. 修复管理页模型上传入口\n2. H5 包 1.04MB，不含 APK",
+    "notes":  "1. 修复下载模型后状态仍显示未就绪\n2. 修复手动框选不生效（手动四角现在优先于自动）\n3. 模型加载失败后可自动重试",
     "force":  false
 }

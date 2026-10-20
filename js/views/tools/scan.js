@@ -222,7 +222,7 @@ export function renderScan(root, back) {
     const aiPart = (v.split('| AI:')[1] || '').trim();
     const chk = (s, key) => (s && s.includes(key) ? '✓' : '✗');
     const ortOk = chk(ortPart, 'corner');
-    const devOk = chk(ortPart, 'dewarp');
+    const devOk = chk(ortPart, 'dewarp') || chk(ortPart, 'ready');
     engNote.textContent = nativeAvailable()
       ? '引擎：OpenCV 4.9 + ORT｜AI找边 ' + ortOk + '　去弯曲 ' + devOk
       : '引擎：内置算法（原生不可用）';
