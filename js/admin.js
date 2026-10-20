@@ -164,6 +164,7 @@ function uploadApkOnce(file, name, onProgress, accessToken) {
 }
 
 async function uploadApk(file, name, onProgress) {
+  const t = await ensureSession(false);
   try {
     return await uploadApkOnce(file, name, onProgress, t);
   } catch (e) {
