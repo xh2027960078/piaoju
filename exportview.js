@@ -1,7 +1,7 @@
 /* 导出中心：ZIP 打包（按项目中心/周期）+ 报销单生成 + 转发 */
 
 import { state, statsByPeriod } from '../store.js';
-import { esc, icon, money, toast, sheet, confirmSheet } from '../ui.js';
+import { esc, icon, money, toast, sheet, confirmSheet, progressModal } from '../ui.js';
 import { buildZip, buildReimbursement, rowsForTemplate, zipFileName, safeName } from '../exporter.js';
 import { saveBlob, shareBlob } from '../platform.js';
 import { rerender } from '../render.js';
@@ -145,18 +145,27 @@ async function doZip(share) {
     });
     if (!ok) return;
   }
-  toast('正在打包，请稍候…');
+  const pp = progressModal({
+    title: '正在打包 ZIP',
+    hint: `共 ${state.files.filter((f) => ids.includes(f.periodId)).length} 个文件，全部在手机本地处理，不会上传。`,
+  });
   try {
     const { blob, count, root } = await buildZip({
       periodIds: ids, zipName: name, includeInvoices, includeAttachments, groupBy,
-      onProgress: (done, total) => { if (done < total) toast(`正在打包 ${done}/${total}`); },
+      onProgress: (done, total, percent) => {
+        if (percent != null) pp.percent(percent, `正在压缩 ${Math.round(percent)}%`);
+        else pp.set(done, total, `正在读取第 ${done}/${total} 个文件`);
+      },
     });
+    pp.percent(100, '打包完成');
+    pp.close();
     if (!count) { toast('所选周期没有可导出的文件', 'err'); return; }
     track('export_zip', { count });
     const filename = `${root}.zip`;
     const res = share ? await shareBlob(blob, filename) : await saveBlob(blob, filename);
     handleResult(res, share, `已打包 ${count} 个文件`, filename, blob);
   } catch (e) {
+    pp.close('打包失败：' + e.message);
     toast('打包失败：' + e.message, 'err');
   }
 }
@@ -174,14 +183,22 @@ async function doXlsx(share) {
   });
   if (!ok) return;
 
-  toast('正在生成报销单…');
+  const pp = progressModal({
+    title: '正在生成报销单',
+    hint: `共 ${rows.length} 行费用明细，逐行写入模板并保留原有格式与公式。`,
+  });
   try {
     track('export_xlsx', { rows: rows.length });
-    const { blob } = await buildReimbursement(ids);
+    const { blob } = await buildReimbursement(ids, {
+      onProgress: (done, total, text) => pp.set(done, total, text),
+    });
+    pp.percent(100, '生成完成');
+    pp.close();
     const filename = `${zipFileName()}_员工报销单.xlsx`;
     const res = share ? await shareBlob(blob, filename) : await saveBlob(blob, filename);
     handleResult(res, share, `已生成 ${rows.length} 行费用明细`, filename, blob);
   } catch (e) {
+    pp.close('生成失败：' + e.message);
     toast('生成失败：' + e.message, 'err');
   }
 }

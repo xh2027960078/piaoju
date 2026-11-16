@@ -2,7 +2,7 @@
 
 import { state, filesOf, amountOf, periodById, refresh } from '../store.js';
 import {
-  toast, icon, esc, money, fmtBytes, daysBetween, actionSheet, confirmSheet,
+  toast, icon, esc, money, fmtBytes, daysBetween, actionSheet, confirmSheet, progressModal,
 } from '../ui.js';
 import { repo } from '../db.js';
 import { rerender } from '../render.js';
@@ -263,12 +263,18 @@ async function exportSelected(list, share) {
     return;
   }
 
-  toast('正在打包…');
+  const pp = progressModal({
+    title: '正在打包 ZIP',
+    hint: `共 ${files.length} 个文件，全部在手机本地处理。`,
+  });
   const zip = new JSZip();
   const rootName = safeName(p ? p.name : '导出');
   const used = new Set();
+  let doneCount = 0;
   for (const f of files) {
     const buf = await repo.data(f.id);
+    doneCount++;
+    pp.set(doneCount, files.length, `正在读取第 ${doneCount}/${files.length} 个文件`);
     if (!buf) continue;
     const folder = f.kind === 'invoice' ? '票据' : '附件';
     let name = safeName(f.name, '文件');
@@ -277,7 +283,11 @@ async function exportSelected(list, share) {
     used.add(folder + name);
     zip.file(`${rootName}/${folder}/${name}`, buf, { binary: true });
   }
-  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 5 } });
+  const blob = await zip.generateAsync(
+    { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 5 } },
+    (m) => pp.percent(m.percent, `正在压缩 ${Math.round(m.percent)}%`),
+  );
+  pp.close();
   const filename = `${rootName}_${files.length}个文件.zip`;
   const res = share ? await shareBlob(blob, filename) : await saveBlob(blob, filename);
   if (res.ok && !share) toast('已导出 ZIP', 'ok');

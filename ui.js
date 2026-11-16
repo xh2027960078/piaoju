@@ -225,3 +225,91 @@ export function promptSheet({ title, label = '', value = '', placeholder = '', t
     });
   });
 }
+
+/**
+ * 导出/生成进度弹层：真实进度条（已完成/总数 + 百分比），带节流更新
+ * 用法：
+ *   const pp = progressModal({ title: '正在打包 ZIP', hint: '数据较多时需要稍等' });
+ *   pp.set(3, 20, '正在读取第 3 个文件');
+ *   pp.percent(64);          // 压缩阶段按百分比
+ *   pp.close();
+ * 少于 350ms 内完成的，不显示（避免闪一下）
+ */
+export function progressModal({ title = '处理中', hint = '' } = {}) {
+  const el = document.createElement('div');
+  el.className = 'progress-modal';
+  el.innerHTML = `
+    <div class="pm-box">
+      <div class="pm-title">${esc(title)}</div>
+      <div class="pm-bar"><i style="width:0%"></i></div>
+      <div class="pm-line"><span class="pm-pct">0%</span><span class="pm-text">准备中…</span></div>
+      ${hint ? `<div class="pm-hint">${esc(hint)}</div>` : ''}
+    </div>`;
+  let shown = false;
+  let done = false;
+  const bar = el.querySelector('.pm-bar i');
+  const pctEl = el.querySelector('.pm-pct');
+  const txtEl = el.querySelector('.pm-text');
+  const titleEl = el.querySelector('.pm-title');
+  let lastPaint = 0;
+  let pending = null;
+
+  const paint = () => {
+    if (!shown) {
+      document.body.appendChild(el);
+      shown = true;
+    }
+    if (pending) {
+      bar.style.width = pending.pct.toFixed(1) + '%';
+      pctEl.textContent = Math.floor(pending.pct) + '%';
+      if (pending.text) txtEl.textContent = pending.text;
+      pending = null;
+    }
+  };
+
+  const t0 = performance.now();
+  const timer = setTimeout(paint, 350);
+
+  const update = (pct, text) => {
+    if (done) return;
+    const now = performance.now();
+    pending = { pct: Math.max(0, Math.min(100, pct)), text };
+    if (!shown) {
+      if (now - t0 >= 350) paint();
+      return;
+    }
+    if (now - lastPaint > 60) {
+      lastPaint = now;
+      paint();
+    }
+  };
+
+  return {
+    set(doneCount, total, text) {
+      const t = total || 0;
+      const pct = t ? (doneCount / t) * 100 : 0;
+      update(pct, text || `已完成 ${doneCount}/${t}`);
+    },
+    percent(pct, text) {
+      update(pct, text || '正在压缩打包…');
+    },
+    title(t) { titleEl.textContent = t; },
+    close(failMsg) {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      if (!shown) { el.remove(); return; }
+      if (failMsg) {
+        titleEl.textContent = '出错了';
+        txtEl.textContent = failMsg;
+        bar.style.background = 'var(--danger, #e5484d)';
+        setTimeout(() => el.remove(), 1600);
+        return;
+      }
+      pending = { pct: 100, text: '完成' };
+      paint();
+      el.classList.add('pm-done');
+      setTimeout(() => el.remove(), 260);
+    },
+  };
+}

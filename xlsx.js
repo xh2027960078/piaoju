@@ -262,7 +262,10 @@ export async function fillTemplate(buffer, dataRows, opts = {}) {
   const patches = new Map(); // rowNum -> new inner xml
   const appended = [];
 
-  dataRows.forEach((data, i) => {
+  const totalRows = dataRows.length;
+  if (opts.onProgress) opts.onProgress(0, totalRows, '准备写入数据');
+  for (let i = 0; i < totalRows; i++) {
+    const data = dataRows[i];
     const rowNum = start + i;
     const existing = rowByNum.get(rowNum);
     let cells;
@@ -361,7 +364,12 @@ export async function fillTemplate(buffer, dataRows, opts = {}) {
     const newRowXml = `<row${existing ? existing.attrs : sample.attrs.replace(/r="\d+"/, `r="${rowNum}"`)}>${inner}</row>`;
     if (existing) patches.set(rowNum, newRowXml);
     else appended.push(newRowXml);
-  });
+    if (opts.onProgress && (i % 120 === 119 || i === totalRows - 1)) {
+      opts.onProgress(i + 1, totalRows, `正在写入第 ${i + 1} 行`);
+      // 让出主线程，保证进度条真实刷新
+      await new Promise((r) => setTimeout(r, 0));
+    }
+  }
 
   let newXml = xml.replace(/<row\b([^>]*?)(\/>|>([\s\S]*?)<\/row>)/g, (whole, attrs, _c, inner) => {
     const rn = (attrs.match(/\br="(\d+)"/) || [])[1];
@@ -397,7 +405,10 @@ export async function fillTemplate(buffer, dataRows, opts = {}) {
   }
   zip.file(wbPath, newWb);
 
-  const out = await zip.generateAsync({ type: 'blob', mimeType: XLSX_MIME, compression: 'DEFLATE', compressionOptions: { level: 6 } });
+  const out = await zip.generateAsync(
+    { type: 'blob', mimeType: XLSX_MIME, compression: 'DEFLATE', compressionOptions: { level: 6 } },
+    (m) => { if (opts.onProgress) opts.onProgress(totalRows, totalRows, `正在压缩 ${Math.round(m.percent)}%`); },
+  );
   return out;
 }
 

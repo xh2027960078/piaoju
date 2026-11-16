@@ -1,8 +1,8 @@
 {
-    "versionCode":  129,
-    "versionName":  "1.7.1",
-    "url":  "https://pihrlxposrvbifachezg.supabase.co/storage/v1/object/public/app/piaoju-1.7.1.apk",
-    "size":  27186548,
-    "notes":  "1. 周期可设默认项目中心，导入票据/附件自动带出（仍可单独修改）\n2. 首页新增报销状态三页签：已报销 / 未报销 / 选择（默认未报销）\n3. 「选择」可多选周期批量标记已报销/未报销；详情页也能一键切换\n4. 修复 PDF 发票预览空白与金额识别（detached buffer / 坏字体）",
+    "versionCode":  130,
+    "versionName":  "1.7.2",
+    "url":  "https://pihrlxposrvbifachezg.supabase.co/storage/v1/object/public/app/piaoju-1.7.2.apk",
+    "size":  27190644,
+    "notes":  "1. 导出 ZIP / 生成报销单 / 导出备份：新增真实进度条（已完成数量 + 百分比 + 当前文件）\n2. 报销单逐行写入并让出主线程，数据量大时不再像卡死\n3. 周期可设默认项目中心，导入自动带出\n4. 首页报销状态三页签 + 多选批量标记，详情页可一键切换\n5. 修复个别发票 PDF 预览空白与金额识别",
     "force":  false
 }

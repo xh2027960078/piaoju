@@ -1,7 +1,7 @@
 /* 设置：报销人信息、报销单模板、数据备份 */
 
 import { state, saveSettings, DEFAULT_SETTINGS } from '../store.js';
-import { esc, icon, toast, confirmSheet, fmtBytes } from '../ui.js';
+import { esc, icon, toast, confirmSheet, progressModal, fmtBytes } from '../ui.js';
 import { pickOption } from '../picker.js';
 import { repo } from '../db.js';
 import { rerender } from '../render.js';
@@ -318,11 +318,19 @@ async function backup() {
   if (state.template && state.template.data) {
     zip.file('template.xlsx', state.template.data, { binary: true });
   }
+  const pp = progressModal({ title: '正在导出备份', hint: `共 ${state.files.length} 个文件，全部在手机本地处理。` });
+  let n = 0;
   for (const f of state.files) {
     const buf = await repo.data(f.id);
+    n++;
+    pp.set(n, state.files.length, `正在读取第 ${n}/${state.files.length} 个文件`);
     if (buf) zip.file(`files/${f.id}`, buf, { binary: true });
   }
-  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 5 } });
+  const blob = await zip.generateAsync(
+    { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 5 } },
+    (m) => pp.percent(m.percent, `正在压缩 ${Math.round(m.percent)}%`),
+  );
+  pp.close();
   const name = `票据管家备份_${new Date().toISOString().slice(0, 10)}.zip`;
   const res = await saveBlob(blob, name);
   if (res.ok) { toast('备份已导出', 'ok'); track('backup'); saveSettings({ lastBackupAt: Date.now() }); }

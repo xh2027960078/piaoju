@@ -152,6 +152,7 @@ export async function buildReimbursement(periodIds, opts = {}) {
   if (!tpl || !tpl.data) throw new Error('尚未导入报销单模板');
   const s = state.settings;
   const blob = await fillTemplate(tpl.data, rows, {
+    onProgress: opts.onProgress,
     traveler: opts.traveler != null ? opts.traveler : s.traveler,
     empCode: s.empCode,
     dept: s.dept,
