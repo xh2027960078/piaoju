@@ -1,8 +1,8 @@
 {
-    "versionCode":  131,
-    "versionName":  "1.8.0",
-    "url":  "https://pihrlxposrvbifachezg.supabase.co/storage/v1/object/public/app/piaoju-1.8.0.apk",
-    "size":  27190714,
-    "notes":  "1. 住宿费：费用项目选「住宿费」后可填入住/离店日期，金额按天数均摊\n2. 图表「每日花费」把住宿金额平均分到每一天，用绿色标出\n3. 票据列表显示住宿区间标签（住宿 10-01~10-03 · 3天）\n4. 导出全流程真实进度条（ZIP / 报销单 / 备份）\n5. 周期可设默认项目中心；首页报销状态三页签 + 批量标记\n6. 修复个别发票 PDF 预览空白与识别",
+    "versionCode":  134,
+    "versionName":  "1.8.3",
+    "url":  "https://pihrlxposrvbifachezg.supabase.co/storage/v1/object/public/app/piaoju-1.8.3.apk",
+    "size":  27194810,
+    "notes":  "1. 图表「汇总比较」右侧改成下拉：近1月 / 近半年 / 近一年 / 近5年，选择会记住\n2. 不同范围自动换分桶：近1月按 5 天一段、半年/一年按月、5年按年",
     "force":  false
 }

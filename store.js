@@ -134,6 +134,31 @@ export function totals() {
   return { amount, invoices, attachments, missing, periods: state.periods.length };
 }
 
+/** 按「报销状态」拆分的合计：已报销 / 未报销 */
+export function totalsByPaid() {
+  const stats = statsByPeriod();
+  let paid = 0, unpaid = 0, paidCount = 0, unpaidCount = 0;
+  let paidInvoices = 0, unpaidInvoices = 0;
+  for (const p of state.periods) {
+    const s = stats.get(p.id) || { amount: 0, invoices: 0 };
+    if (p.reimbursed) {
+      paid += s.amount;
+      paidInvoices += s.invoices;
+      paidCount++;
+    } else {
+      unpaid += s.amount;
+      unpaidInvoices += s.invoices;
+      unpaidCount++;
+    }
+  }
+  return {
+    paid, unpaid, total: paid + unpaid,
+    paidCount, unpaidCount,
+    paidInvoices, unpaidInvoices,
+    periods: state.periods.length,
+  };
+}
+
 /** 票据发生日期：优先票据日期，其次周期开始日期 */
 export function dateOfFile(f) {
   const m = f.meta || {};
@@ -152,10 +177,75 @@ export function lastMonths(n = 6) {
   return out;
 }
 
-export function chartData() {
-  const months = lastMonths(6);
-  const byMonth = months.map((m) => ({ label: m.label, value: 0, key: m.key }));
-  const monthIdx = new Map(byMonth.map((m, i) => [m.key, i]));
+/** 汇总比较的时间范围 */
+export const CHART_SPANS = [
+  { key: 'm1', label: '近1月' },
+  { key: 'm6', label: '近半年' },
+  { key: 'y1', label: '近一年' },
+  { key: 'y5', label: '近5年' },
+];
+
+/** 按范围生成柱状图的桶：近1月按 5 天一段、半年/一年按月、5 年按年 */
+export function bucketsFor(span = 'm6') {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  if (span === 'm1') {
+    const out = [];
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
+    for (let i = 0; i < 6; i++) {
+      const s = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i * 5);
+      const e = new Date(s.getFullYear(), s.getMonth(), s.getDate() + 4);
+      out.push({
+        key: `d${i}`,
+        label: `${s.getMonth() + 1}/${s.getDate()}`,
+        from: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`,
+        to: `${e.getFullYear()}-${pad(e.getMonth() + 1)}-${pad(e.getDate())}`,
+      });
+    }
+    return out;
+  }
+  if (span === 'y5') {
+    const out = [];
+    for (let i = 4; i >= 0; i--) {
+      const y = now.getFullYear() - i;
+      out.push({ key: `y${y}`, label: `${y}`, year: String(y) });
+    }
+    return out;
+  }
+  if (span === 'y1') {
+    // 12 个月：跨年时首月标上年份，避免两个「1月」混淆
+    const out = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const mm = d.getMonth() + 1;
+      const label = mm === 1 ? `${String(d.getFullYear()).slice(2)}年1月` : `${mm}月`;
+      out.push({ key: `${d.getFullYear()}-${pad(mm)}`, label });
+    }
+    return out;
+  }
+  return lastMonths(6);
+}
+
+/** 把票据日期放进对应的桶 */
+function bucketIndex(buckets, span, d) {
+  if (!d) return -1;
+  if (span === 'm1') {
+    for (let i = 0; i < buckets.length; i++) {
+      const b = buckets[i];
+      if (d >= b.from && d <= b.to) return i;
+    }
+    return -1;
+  }
+  if (span === 'y5') {
+    const y = d.slice(0, 4);
+    return buckets.findIndex((b) => b.year === y);
+  }
+  return buckets.findIndex((b) => b.key === d.slice(0, 7));
+}
+
+export function chartData(span = 'm6') {
+  const buckets = bucketsFor(span);
+  const byMonth = buckets.map((b) => ({ label: b.label, value: 0, key: b.key }));
 
   const byItem = new Map();
   const byType = new Map();
@@ -166,8 +256,8 @@ export function chartData() {
     const amt = Number(f.meta && f.meta.amount) || 0;
     const d = dateOfFile(f);
     if (d) {
-      const mi = monthIdx.get(d.slice(0, 7));
-      if (mi != null) byMonth[mi].value += amt;
+      const mi = bucketIndex(buckets, span, d.slice(0, 10));
+      if (mi >= 0) byMonth[mi].value += amt;
     }
     const item = (f.meta && f.meta.costItem) || '未分类';
     byItem.set(item, (byItem.get(item) || 0) + amt);

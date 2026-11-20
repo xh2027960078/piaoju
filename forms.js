@@ -159,6 +159,11 @@ function bindPick(root, current) {
     if (v === null) return;
     current[key] = v;
     setPickUI(root, key, v);
+    // 选择器是独立的弹层，选项点击不会冒泡到表单；
+    // 这里主动通知，让表单能立刻响应（例如住宿费显示入住日期）
+    try {
+      root.dispatchEvent(new CustomEvent('pickchange', { detail: { key, value: v }, bubbles: true }));
+    } catch (err) { /* 老 WebView 不支持 CustomEvent 构造时忽略 */ }
   });
 }
 
@@ -254,13 +259,24 @@ export function openInvoiceForm(file, { onSaved } = {}) {
             return;
           }
           const per = amt > 0 ? amt / days : 0;
-          stayHint.textContent = `${days} 天${per > 0 ? ` · 每天 ¥${per.toFixed(2)}` : ''} · 会平均分摊到「每日花费」并用绿色标记`;
+          stayHint.textContent = `共 ${days} 天（含首尾）${per > 0 ? ` · 每天 ¥${per.toFixed(2)}` : ''} · 会平均分摊到「每日花费」并用绿色标记`;
         };
-        const costPickBtn = root.querySelector('[data-pick="costItem"]');
-        if (costPickBtn) costPickBtn.addEventListener('click', () => setTimeout(syncStay, 60));
+        // 选择器选完会派发 pickchange，立刻切换住宿区间的显示
+        root.addEventListener('pickchange', (ev) => {
+          if (!ev || !ev.detail || ev.detail.key === 'costItem') syncStay();
+        });
         root.addEventListener('change', syncStay);
         root.addEventListener('input', syncStay);
         syncStay();
+        // 兜底：万一事件没触发（老 WebView），打开表单后短轮询 12 次检查费用项目
+        let stayTicks = 0;
+        const stayTimer = setInterval(() => {
+          stayTicks++;
+          const want = String(current.costItem || '').indexOf('住宿') >= 0;
+          const now = stayBox && stayBox.style.display !== 'none';
+          if (want !== now) syncStay();
+          if (stayTicks > 12) clearInterval(stayTimer);
+        }, 400);
 
         // 识别到多个金额时给出一排可点的候选值，避免自动选错时还要手输
         const chipsBox = root.querySelector('#amtChips');

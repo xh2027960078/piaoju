@@ -1,12 +1,18 @@
 /* 图表统计 */
 
-import { chartData, totals, state, dateOfFile } from '../store.js';
+import { chartData, totals, state, dateOfFile, totalsByPaid, CHART_SPANS, saveSettings } from '../store.js';
 import { dailyAmounts } from '../lodging.js';
 import { esc, icon, money, todayISO } from '../ui.js';
 import { donut, monthBars, hbars, typeBars, calendarGrid, PALETTE } from '../charts.js';
 import { DEFAULT_CHARTS } from '../appearance.js';
 
 let cal = null;
+
+/* 汇总比较的时间范围，记住上次选择 */
+function chartSpan() {
+  const s = state.settings && state.settings.chartSpan;
+  return CHART_SPANS.some((x) => x.key === s) ? s : 'm6';
+}
 
 function chartFlags() {
   return { ...DEFAULT_CHARTS, ...(state.settings.charts || {}) };
@@ -46,14 +52,18 @@ export function renderCharts(root) {
   const show = (k) => flags[k] !== false;
 
   const t = totals();
-  const d = chartData();
+  const paid = totalsByPaid();
+  const span = chartSpan();
+  const d = chartData(span);
   const hasData = t.invoices > 0 && t.amount > 0;
 
   const stats = `
     <div class="stat-grid">
-      <div class="stat accent"><div class="k">累计报销金额</div><div class="v">¥${money(t.amount, false)}</div></div>
+      <div class="stat accent"><div class="k">累计已报销</div><div class="v">¥${money(paid.paid, false)}</div>
+        <div class="stat-sub">未报销 ¥${money(paid.unpaid, false)}</div></div>
       <div class="stat blue"><div class="k">票据总数</div><div class="v">${t.invoices}<small>张</small></div></div>
-      <div class="stat"><div class="k">出差周期</div><div class="v">${t.periods}<small>个</small></div></div>
+      <div class="stat"><div class="k">出差周期</div><div class="v">${t.periods}<small>个</small></div>
+        <div class="stat-sub">已报销 ${paid.paidCount} · 未报销 ${paid.unpaidCount}</div></div>
       <div class="stat ${t.missing ? 'accent' : 'green'}"><div class="k">${t.missing ? '待填金额' : '附件数量'}</div>
         <div class="v">${t.missing || t.attachments}<small>${t.missing ? '张' : '个'}</small></div></div>
     </div>`;
@@ -84,7 +94,12 @@ export function renderCharts(root) {
 
   const monthlyCard = show('monthly') ? `
     <div class="card">
-      <div class="card-head"><span class="card-title">近 6 个月花费</span><span class="card-sub">按月汇总</span></div>
+      <div class="card-head">
+        <span class="card-title">汇总比较</span>
+        <select class="chart-span" data-span aria-label="汇总范围">
+          ${CHART_SPANS.map((s) => `<option value="${s.key}"${s.key === span ? ' selected' : ''}>${s.label}</option>`).join('')}
+        </select>
+      </div>
       <div class="chart-wrap">${monthBars(d.byMonth)}</div>
     </div>` : '';
 
@@ -119,6 +134,16 @@ export function renderCharts(root) {
     ${anyChart ? '' : '<div class="empty" style="padding-top:20px">' + icon('chart') + '<p>已在设置里隐藏所有图表</p><p style="font-size:12.5px">可在「设置 → 个性化 → 图表显示」重新打开</p></div>'}`;
 
   wireCalendar(root);
+  const spanSel = root.querySelector('[data-span]');
+  if (spanSel) {
+    spanSel.addEventListener('change', async () => {
+      const v = spanSel.value;
+      if (!CHART_SPANS.some((x) => x.key === v)) return;
+      try { await saveSettings({ chartSpan: v }); } catch (e) { /* 存不下也不影响本次显示 */ }
+      state.settings.chartSpan = v;
+      renderCharts(root);
+    });
+  }
 }
 
 function wireCalendar(root) {

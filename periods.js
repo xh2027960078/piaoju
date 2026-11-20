@@ -1,6 +1,6 @@
 /* 周期列表 */
 
-import { state, statsByPeriod, refresh } from '../store.js';
+import { state, statsByPeriod, refresh, totalsByPaid } from '../store.js';
 import { esc, icon, daysBetween, actionSheet, confirmSheet, toast, money } from '../ui.js';
 import { openPeriodForm } from '../forms.js';
 import { repo } from '../db.js';
@@ -107,6 +107,19 @@ export function renderPeriods(root) {
        </div>`
     : '';
 
+  // 合计：已报销 / 未报销（始终两个都显示，便于对账）
+  const tp = totalsByPaid();
+  const totalBar = `
+    <div class="pv-total">
+      <div class="pv-total-row">
+        <span class="pv-total-item"><i class="dot ok"></i>已报销
+          <b>¥${money(tp.paid, false)}</b><small>${tp.paidCount} 个周期</small></span>
+        <span class="pv-total-item"><i class="dot gray"></i>未报销
+          <b>¥${money(tp.unpaid, false)}</b><small>${tp.unpaidCount} 个周期</small></span>
+      </div>
+      <div class="pv-total-all">合计 ¥${money(tp.total, false)} · 共 ${tp.periods} 个周期</div>
+    </div>`;
+
   const bar = selecting ? `
     <div class="pv-bar">
       <div class="pv-bar-info">已选 ${picked.size} 个</div>
@@ -115,7 +128,7 @@ export function renderPeriods(root) {
       <button class="btn small primary" data-pv-mark="1">标记已报销</button>
     </div>` : '';
 
-  root.innerHTML = `${seg}<div style="margin-top:2px">${cards}</div>${emptyHint}${bar}`;
+  root.innerHTML = `${seg}<div style="margin-top:2px">${cards}</div>${emptyHint}${totalBar}${bar}`;
 
   root.querySelectorAll('[data-pv]').forEach((b) => b.addEventListener('click', () => {
     const v = b.dataset.pv;
