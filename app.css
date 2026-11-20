@@ -649,11 +649,18 @@ svg[aria-hidden="true"] { fill: none; stroke: currentColor; stroke-width: 1.8; s
 .cal-day.l3 { background: #a9c1ff; }
 .cal-day.l4 { background: #7fa3ff; }
 .cal-day.l4 .v, .cal-day.l4 .d { color: #fff; }
+/* 住宿费均摊的那几天：绿色标记，和普通支出区分开 */
+.cal-day.lodge { box-shadow: inset 0 0 0 2px var(--ok, #2fa36b); }
+.cal-day.lodge .v { color: var(--ok, #2fa36b); font-weight: 800; }
+.cal-day.lodge.l3, .cal-day.lodge.l4 { background: #cdeedb; }
+.cal-day.lodge.l3 .v, .cal-day.lodge.l4 .v, .cal-day.lodge.l3 .d, .cal-day.lodge.l4 .d { color: #1e7a4d; }
 @media (prefers-color-scheme: dark) {
   .cal-day.l1 { background: #1b2a4d; }
   .cal-day.l2 { background: #21365f; }
   .cal-day.l3 { background: #2a4a86; }
   .cal-day.l4 { background: #3560ad; }
+  .cal-day.lodge.l3, .cal-day.lodge.l4 { background: #1e3d2c; }
+  .cal-day.lodge .v { color: #6fd39a; }
 }
 .cal-foot { display: flex; justify-content: space-between; margin-top: 12px; font-size: 12.5px; color: var(--text-3); }
 /* ---------- 批量录入的「统一设置」标签 ---------- */
@@ -1311,3 +1318,17 @@ body.has-wallpaper .stat {
 .pm-text { max-width: 68%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
 .pm-hint { margin-top: 10px; font-size: 11.5px; color: var(--text-3, #889); line-height: 1.5; }
 .pm-done .pm-box { transition: opacity .2s ease; opacity: .96; }
+/* ---- 住宿费入住区间 ---- */
+.stay-box {
+  margin: -4px 2px 12px; padding: 10px 12px 2px;
+  border-radius: 14px; background: var(--ok-soft, #eaf7f0);
+  border: 1px solid transparent;
+}
+.stay-box .field-label { color: var(--ok, #2fa36b); }
+.stay-box .hint { color: var(--text-2); }
+/* 票据行里的住宿区间标签 */
+.lodge-tag {
+  display: inline-block; padding: 1px 7px; border-radius: 999px;
+  background: var(--ok-soft, #eaf7f0); color: var(--ok, #2fa36b);
+  font-weight: 700; font-size: 11.5px;
+}

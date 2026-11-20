@@ -5,6 +5,7 @@ import {
   toast, icon, esc, money, fmtBytes, daysBetween, actionSheet, confirmSheet, progressModal,
 } from '../ui.js';
 import { repo } from '../db.js';
+import { stayDays } from '../lodging.js';
 import { rerender } from '../render.js';
 import { importFiles, openInvoiceForm, openAttachmentForm, openBatchMeta, detectImported, openDetectProgress } from '../forms.js';
 import { takePhoto, pickFiles, saveBlob, shareBlob } from '../platform.js';
@@ -126,6 +127,10 @@ function fileRow(f, selected, seqNo) {
     sub.push(`<b>${m.amount ? money(m.amount) : '待填金额'}</b>`);
     if (m.project) sub.push(esc(m.project));
     if (m.costItem) sub.push(esc(m.costItem));
+    if (m.stayStart && m.stayEnd) {
+      const days = stayDays(m.stayStart, m.stayEnd);
+      sub.push(`<span class="lodge-tag">住宿 ${esc(String(m.stayStart).slice(5))}~${esc(String(m.stayEnd).slice(5))}${days ? ` · ${days}天` : ''}</span>`);
+    }
   } else {
     sub.push(`${KIND_LABEL[f.fileKind] || '文件'} · ${fmtBytes(f.size)}`);
     if (m.project) sub.push(esc(m.project));

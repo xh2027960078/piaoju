@@ -8,6 +8,7 @@ import { pickOption } from './picker.js';
 import { buildFileName, uniqueNameInPeriod } from './naming.js';
 import { openFileViewer } from './viewer.js';
 import { detectFromPdf } from './pdftext.js';
+import { stayDays } from './lodging.js';
 
 const OPTIONS = window.OPTIONS || { costItems: [], travelTypes: [], invoiceTypes: [], departments: [], projects: [], orgs: [] };
 
@@ -198,6 +199,15 @@ export function openInvoiceForm(file, { onSaved } = {}) {
     <div class="chip-row" id="amtChips" style="margin:-6px 2px 12px"></div>
     ${pickButton('project', meta.project, '项目中心')}
     ${pickButton('costItem', meta.costItem, '费用项目')}
+    <div class="stay-box" id="stayBox" style="display:none">
+      <div class="field-row">
+        <div class="field"><label class="field-label">入住日期</label>
+          <input class="input" data-f="stayStart" type="date" value="${esc(meta.stayStart || '')}" /></div>
+        <div class="field"><label class="field-label">离店日期</label>
+          <input class="input" data-f="stayEnd" type="date" value="${esc(meta.stayEnd || '')}" /></div>
+      </div>
+      <p class="hint" id="stayHint" style="margin:-4px 2px 12px">住宿费会按入住天数平均分摊到「每日花费」里，用绿色标出</p>
+    </div>
     <div class="field-row" style="align-items:flex-start">
       <div style="flex:1;min-width:0">${pickButton('travelType', meta.travelType, '差旅费类型')}</div>
       <div style="flex:1;min-width:0">${pickButton('invoiceType', meta.invoiceType, '发票类型')}</div>
@@ -224,6 +234,33 @@ export function openInvoiceForm(file, { onSaved } = {}) {
       onMount(root, close) {
         bindPick(root, current);
         root.querySelector('[data-preview]').addEventListener('click', () => openFileViewer(file.id, {}));
+
+        // 住宿费：显示入住日期区间，并按天均摊提示
+        const stayBox = root.querySelector('#stayBox');
+        const stayHint = root.querySelector('#stayHint');
+        const syncStay = () => {
+          const isStay = String(current.costItem || '').indexOf('住宿') >= 0;
+          if (stayBox) stayBox.style.display = isStay ? '' : 'none';
+          if (!isStay || !stayHint) return;
+          const sEl = root.querySelector('[data-f="stayStart"]');
+          const eEl = root.querySelector('[data-f="stayEnd"]');
+          const amtEl = root.querySelector('[data-f="amount"]');
+          const s = (sEl && sEl.value) || '';
+          const e2 = (eEl && eEl.value) || '';
+          const amt = Number((amtEl && amtEl.value) || 0);
+          const days = stayDays(s, e2);
+          if (!days) {
+            stayHint.textContent = '填写入住/离店日期后，住宿费会平均分摊到每一天（每日花费里绿色标记）';
+            return;
+          }
+          const per = amt > 0 ? amt / days : 0;
+          stayHint.textContent = `${days} 天${per > 0 ? ` · 每天 ¥${per.toFixed(2)}` : ''} · 会平均分摊到「每日花费」并用绿色标记`;
+        };
+        const costPickBtn = root.querySelector('[data-pick="costItem"]');
+        if (costPickBtn) costPickBtn.addEventListener('click', () => setTimeout(syncStay, 60));
+        root.addEventListener('change', syncStay);
+        root.addEventListener('input', syncStay);
+        syncStay();
 
         // 识别到多个金额时给出一排可点的候选值，避免自动选错时还要手输
         const chipsBox = root.querySelector('#amtChips');
@@ -273,6 +310,13 @@ export function openInvoiceForm(file, { onSaved } = {}) {
           };
           const amount = Number(String(read('amount')).replace(/[^\d.\-]/g, ''));
           if (!amount || amount <= 0) { toast(`票据 #${file.seq || 1} 金额未填`, 'err'); return; }
+          const isStay = String(current.costItem || '').indexOf('住宿') >= 0;
+          const stayStart = isStay ? read('stayStart') : '';
+          const stayEnd = isStay ? read('stayEnd') : '';
+          if (isStay && stayStart && stayEnd && stayEnd < stayStart) {
+            toast('离店日期不能早于入住日期', 'err');
+            return;
+          }
           const next = {
             ...current,
             amount,
@@ -281,6 +325,8 @@ export function openInvoiceForm(file, { onSaved } = {}) {
             to: read('to'),
             remark: read('remark'),
             dept: state.settings.dept || '',
+            stayStart,
+            stayEnd,
           };
           const name = uniqueNameInPeriod(file.periodId, buildFileName(next, file.name, file.mime), file.id);
           const saved = await repo.saveFile({ ...file, name, meta: next });

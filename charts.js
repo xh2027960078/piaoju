@@ -114,15 +114,16 @@ export function typeBars(items) {
     </div>`).join('')}</div>`;
 }
 
-/* 日历热力图：按天汇总金额（表头和日期放在同一个 grid 里，保证对齐） */
-export function calendarGrid(year, month, dayMap, todayStr = '') {
+/* 日历热力图：按天汇总金额（表头和日期放在同一个 grid 里，保证对齐）
+   lodge：当天来自住宿费的部分，>0 时用绿色标记，便于看出哪几天有住宿 */
+export function calendarGrid(year, month, dayMap, todayStr = '', lodgeMap = null) {
   const first = new Date(year, month - 1, 1);
   const startDow = (first.getDay() + 6) % 7; // 周一为第一列
   const daysInMonth = new Date(year, month, 0).getDate();
   const values = [];
   for (let d = 1; d <= daysInMonth; d++) {
     const key = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    values.push({ d, key, value: dayMap.get(key) || 0 });
+    values.push({ d, key, value: dayMap.get(key) || 0, lodge: lodgeMap ? (lodgeMap.get(key) || 0) : 0 });
   }
   const max = Math.max(1, ...values.map((v) => v.value));
   const cells = [];
@@ -133,8 +134,10 @@ export function calendarGrid(year, month, dayMap, todayStr = '') {
     let lvl = 0;
     if (v.value > 0) lvl = Math.min(4, 1 + Math.floor((v.value / max) * 3.999));
     const today = v.key === todayStr ? ' today' : '';
+    const isLodge = v.lodge > 0;
     const val = v.value > 0 ? `<span class="v">${v.value >= 1000 ? (v.value / 1000).toFixed(1) + 'k' : Math.round(v.value)}</span>` : '';
-    cells.push(`<div class="cal-day has${lvl ? ' l' + lvl : ''}${today}" title="${v.key}">
+    const tip = v.key + (isLodge ? `（住宿 ¥${Math.round(v.lodge)}）` : '');
+    cells.push(`<div class="cal-day has${lvl ? ' l' + lvl : ''}${isLodge ? ' lodge' : ''}${today}" title="${tip}">
       <span class="d">${v.d}</span>${val}</div>`);
   }
   return `<div class="cal-grid">${cells.join('')}</div>`;

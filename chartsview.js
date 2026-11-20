@@ -1,6 +1,7 @@
 /* 图表统计 */
 
 import { chartData, totals, state, dateOfFile } from '../store.js';
+import { dailyAmounts } from '../lodging.js';
 import { esc, icon, money, todayISO } from '../ui.js';
 import { donut, monthBars, hbars, typeBars, calendarGrid, PALETTE } from '../charts.js';
 import { DEFAULT_CHARTS } from '../appearance.js';
@@ -12,22 +13,14 @@ function chartFlags() {
 }
 
 function byDayMap() {
-  const map = new Map();
-  for (const f of state.files) {
-    if (f.kind !== 'invoice') continue;
-    const amt = Number(f.meta && f.meta.amount) || 0;
-    if (!amt) continue;
-    const d = dateOfFile(f);
-    if (!d) continue;
-    map.set(d, (map.get(d) || 0) + amt);
-  }
-  return map;
+  // 住宿费按入住期间均摊；返回每日合计与"其中住宿"的部分（用于绿色标记）
+  return dailyAmounts(state.files);
 }
 
 function calendarSection() {
   const year = cal.getFullYear();
   const month = cal.getMonth() + 1;
-  const map = byDayMap();
+  const { map, lodge } = byDayMap();
   const prefix = `${year}-${String(month).padStart(2, '0')}`;
   let sum = 0, days = 0;
   for (const [k, v] of map) {
@@ -39,7 +32,7 @@ function calendarSection() {
       <div class="cal-title">${year} 年 ${month} 月</div>
       <button class="cal-nav" data-cal="next" aria-label="下个月">${icon('right')}</button>
     </div>
-    ${calendarGrid(year, month, map, todayISO())}
+    ${calendarGrid(year, month, map, todayISO(), lodge)}
     <div class="cal-foot"><span>本月合计 <b style="color:var(--accent)">¥${money(sum, false)}</b></span><span>${days} 天有支出</span></div>`;
 }
 

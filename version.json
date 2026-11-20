@@ -1,8 +1,8 @@
 {
-    "versionCode":  130,
-    "versionName":  "1.7.2",
-    "url":  "https://pihrlxposrvbifachezg.supabase.co/storage/v1/object/public/app/piaoju-1.7.2.apk",
-    "size":  27190644,
-    "notes":  "1. 导出 ZIP / 生成报销单 / 导出备份：新增真实进度条（已完成数量 + 百分比 + 当前文件）\n2. 报销单逐行写入并让出主线程，数据量大时不再像卡死\n3. 周期可设默认项目中心，导入自动带出\n4. 首页报销状态三页签 + 多选批量标记，详情页可一键切换\n5. 修复个别发票 PDF 预览空白与金额识别",
+    "versionCode":  131,
+    "versionName":  "1.8.0",
+    "url":  "https://pihrlxposrvbifachezg.supabase.co/storage/v1/object/public/app/piaoju-1.8.0.apk",
+    "size":  27190714,
+    "notes":  "1. 住宿费：费用项目选「住宿费」后可填入住/离店日期，金额按天数均摊\n2. 图表「每日花费」把住宿金额平均分到每一天，用绿色标出\n3. 票据列表显示住宿区间标签（住宿 10-01~10-03 · 3天）\n4. 导出全流程真实进度条（ZIP / 报销单 / 备份）\n5. 周期可设默认项目中心；首页报销状态三页签 + 批量标记\n6. 修复个别发票 PDF 预览空白与识别",
     "force":  false
 }
