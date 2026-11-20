@@ -1,8 +1,8 @@
 {
-    "versionCode":  134,
-    "versionName":  "1.8.3",
-    "url":  "https://pihrlxposrvbifachezg.supabase.co/storage/v1/object/public/app/piaoju-1.8.3.apk",
+    "versionCode":  135,
+    "versionName":  "1.8.4",
+    "url":  "https://pihrlxposrvbifachezg.supabase.co/storage/v1/object/public/app/piaoju-1.8.4.apk",
     "size":  27194810,
-    "notes":  "1. 图表「汇总比较」右侧改成下拉：近1月 / 近半年 / 近一年 / 近5年，选择会记住\n2. 不同范围自动换分桶：近1月按 5 天一段、半年/一年按月、5年按年",
+    "notes":  "1. 汇总比较范围新加「近一周」；近一年横轴月份不再挤在一起\n2. 修复：近一周/近一月柱状图看不到住宿费（住宿按天分摊后计入各桶）\n3. 首页合计挪到标题下方，并显示已报销/未报销拆分；底部合计条移除",
     "force":  false
 }

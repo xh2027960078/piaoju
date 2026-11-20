@@ -1,6 +1,7 @@
 /* 全局状态与派生统计 */
 
 import { repo } from './db.js';
+import { dailyAmounts } from './lodging.js';
 import { DEFAULT_CHARTS } from './appearance.js';
 import { inspectTemplate } from './xlsx.js';
 
@@ -179,6 +180,7 @@ export function lastMonths(n = 6) {
 
 /** 汇总比较的时间范围 */
 export const CHART_SPANS = [
+  { key: 'w1', label: '近一周' },
   { key: 'm1', label: '近1月' },
   { key: 'm6', label: '近半年' },
   { key: 'y1', label: '近一年' },
@@ -189,6 +191,15 @@ export const CHART_SPANS = [
 export function bucketsFor(span = 'm6') {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, '0');
+  if (span === 'w1') {
+    const out = [];
+    for (let i = 6; i >= 0; i--) {
+      const s = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const k = `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`;
+      out.push({ key: k, label: `${s.getMonth() + 1}/${s.getDate()}`, from: k, to: k });
+    }
+    return out;
+  }
   if (span === 'm1') {
     const out = [];
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
@@ -213,13 +224,12 @@ export function bucketsFor(span = 'm6') {
     return out;
   }
   if (span === 'y1') {
-    // 12 个月：跨年时首月标上年份，避免两个「1月」混淆
+    // 12 个月：标签只用「M月」，12 根柱宽度放不下年份前缀
     const out = [];
     for (let i = 11; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const mm = d.getMonth() + 1;
-      const label = mm === 1 ? `${String(d.getFullYear()).slice(2)}年1月` : `${mm}月`;
-      out.push({ key: `${d.getFullYear()}-${pad(mm)}`, label });
+      out.push({ key: `${d.getFullYear()}-${pad(mm)}`, label: `${mm}月` });
     }
     return out;
   }

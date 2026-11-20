@@ -1,6 +1,6 @@
 /* 应用入口：导航、顶栏、初始化 */
 
-import { state, loadAll, loadSettings, refresh, subscribe, totals, missingRows } from './store.js';
+import { state, loadAll, loadSettings, refresh, subscribe, totals, totalsByPaid, missingRows } from './store.js';
 import { renderPeriods, createPeriod } from './views/periods.js';
 import { renderDetail } from './views/detail.js';
 import { renderCharts } from './views/chartsview.js';
@@ -93,13 +93,23 @@ function renderTopbar() {
   let sub = t.sub;
   if (state.tab === 'home' && (state.homeSeg || 'periods') === 'periods') {
     const tot = totals();
-    sub = state.periods.length
-      ? `${tot.periods} 个周期 · ${tot.invoices} 张票据 · 合计 ¥${money(tot.amount, false)}`
-      : '按出差周期整理票据，报销不再漏单';
+    if (!state.periods.length) {
+      pageSub.textContent = '按出差周期整理票据，报销不再漏单';
+      sub = null;
+    } else {
+      const tp = totalsByPaid();
+      // 合计放在顶部：一行总数 + 一行已报销/未报销拆分
+      pageSub.innerHTML = `<span class="sub-line">${tot.periods} 个周期 · ${tot.invoices} 张票据 · 合计 ¥${money(tot.amount, false)}</span>`
+        + `<span class="sub-line sub-sum">`
+        + `<i class="dot ok"></i>已报销 ¥${money(tp.paid, false)}<small>${tp.paidCount} 个</small>`
+        + `<i class="dot gray"></i>未报销 ¥${money(tp.unpaid, false)}<small>${tp.unpaidCount} 个</small>`
+        + `</span>`;
+      sub = null;
+    }
   }
   if (state.tab === 'home' && state.homeSeg === 'charts') sub = '报销花费一览';
   if (state.tab === 'home' && state.homeSeg === 'export') sub = '打包 ZIP / 生成报销单';
-  pageSub.textContent = sub;
+  if (sub !== null) pageSub.textContent = sub;
   topActions.innerHTML = '';
   topActions.style.flexDirection = '';
 }

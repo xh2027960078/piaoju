@@ -1367,3 +1367,13 @@ body.has-wallpaper .stat {
   background-image: none;
 }
 .chart-span:focus { outline: 2px solid var(--primary-soft); }
+/* ---- 首页顶部：合计 + 已报销/未报销 ---- */
+.page-sub .sub-line { display: block; }
+.page-sub .sub-sum {
+  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+  margin-top: 3px; font-size: 12px; color: var(--text-2);
+}
+.page-sub .sub-sum .dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 7px; }
+.page-sub .sub-sum .dot.ok { background: var(--ok, #2fa36b); }
+.page-sub .sub-sum .dot.gray { background: var(--text-3, #99a); }
+.page-sub .sub-sum small { color: var(--text-3); font-size: 11px; margin-right: 6px; }
