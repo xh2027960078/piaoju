@@ -6,18 +6,61 @@ export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsh
 
 /* 模板字段 → 列代码（对应第 3 行字段编码） */
 export const FIELDS = [
-  { key: 'costItem', code: 'FExpID#Name', label: '费用项目', type: 'text', pick: 'costItems' },
-  { key: 'startDate', code: 'FTravelStartDate', label: '开始日期', type: 'date' },
-  { key: 'endDate', code: 'FTravelEndDate', label: '结束日期', type: 'date' },
-  { key: 'from', code: 'FTravelStartSite', label: '出发地', type: 'text' },
-  { key: 'to', code: 'FTravelEndSite', label: '目的地', type: 'text' },
-  { key: 'travelType', code: 'FTravelType#Name', label: '差旅费类型', type: 'text', pick: 'travelTypes' },
-  { key: 'amount', code: 'FTravelAmount', label: '差旅费金额', type: 'number' },
-  { key: 'invoiceType', code: 'FInvoiceType', label: '发票类型', type: 'text', pick: 'invoiceTypes' },
-  { key: 'dept', code: 'FExpenseDeptEntryID#Name', label: '费用承担部门', type: 'text', pick: 'departments' },
-  { key: 'project', code: 'F_DH_Project#Name', label: '项目中心', type: 'text', pick: 'projects' },
-  { key: 'remark', code: 'FRemark', label: '备注', type: 'text' },
+  { key: 'costItem', code: 'FExpID#Name', label: '费用项目', type: 'text', pick: 'costItems', aliases: ['FExpID', 'FCostItem#Name', 'FExpenseItem#Name'] },
+  { key: 'startDate', code: 'FTravelStartDate', label: '开始日期', type: 'date', aliases: ['FStartDate'] },
+  { key: 'endDate', code: 'FTravelEndDate', label: '结束日期', type: 'date', aliases: ['FEndDate'] },
+  { key: 'from', code: 'FTravelStartSite', label: '出发地', type: 'text', aliases: ['FFromSite'] },
+  { key: 'to', code: 'FTravelEndSite', label: '目的地', type: 'text', aliases: ['FToSite'] },
+  { key: 'travelType', code: 'FTravelType#Name', label: '差旅费类型', type: 'text', pick: 'travelTypes', aliases: ['FTravelType'] },
+  { key: 'amount', code: 'FTravelAmount', label: '差旅费金额', type: 'number', aliases: ['FAmount', 'FTaxSubmitAmt'] },
+  { key: 'invoiceType', code: 'FInvoiceType', label: '发票类型', type: 'text', pick: 'invoiceTypes', aliases: ['FInvoiceKind#Name'] },
+  { key: 'dept', code: 'FExpenseDeptEntryID#Name', label: '费用承担部门', type: 'text', pick: 'departments', aliases: ['FExpenseDeptEntryID', 'FDeptID#Name', 'FDepID#Name'] },
+  {
+    key: 'project', code: 'F_DH_Project#Name', label: '项目中心', type: 'text', pick: 'projects',
+    aliases: [
+      'F_DH_Project', 'FProjectID#Name', 'FProjectID', 'FProject#Name', 'FProject',
+      'FExpProject#Name', 'FExpenseProject#Name', 'FExpenseProject', 'FProjectEntryID#Name',
+      'FProjectEntryID', 'F_DH_ProjectName', 'FProjectCode',
+    ],
+  },
+  { key: 'remark', code: 'FRemark', label: '备注', type: 'text', aliases: ['FNote', 'FMemo', 'FComments'] },
 ];
+
+/** 中文字段名归一化：去掉空格、星号、冒号、括号 */
+export function normLabel(s) {
+  return String(s || '')
+    .replace(/[\s\*:：()（）\[\]【】<>《》]/g, '')
+    .trim();
+}
+
+/** 在模板里找某个字段对应的列：先精确编码，再别名，再前缀，最后按中文表头 */
+export function resolveColumn(info, field) {
+  if (!info || !info.columns) return null;
+  const codes = [field.code, ...(field.aliases || [])].filter(Boolean);
+  for (const cd of codes) {
+    if (info.columns[cd]) return info.columns[cd];
+  }
+  for (const cd of codes) {
+    const hit = Object.keys(info.columns).find((k) => k.startsWith(cd));
+    if (hit) return info.columns[hit];
+  }
+  const lab = normLabel(field.label);
+  const labelCols = info.labelCols || {};
+  if (labelCols[lab]) return labelCols[lab];
+  const loose = Object.keys(labelCols).find((k) => k.indexOf(lab) >= 0 || (k && lab.indexOf(k) >= 0 && k.length >= 2));
+  return loose ? labelCols[loose] : null;
+}
+
+/** 模板字段匹配报告：哪些匹配上了、哪些没匹配（用于设置页显示） */
+export function templateReport(info) {
+  const matched = [];
+  const missing = [];
+  for (const f of FIELDS) {
+    if (resolveColumn(info, f)) matched.push(f.label);
+    else missing.push(f.label);
+  }
+  return { matched, missing, total: FIELDS.length };
+}
 
 const unxml = (s) => String(s)
   .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
@@ -199,9 +242,23 @@ export async function inspectTemplate(buffer) {
     if (txt) columns[txt] = { col: c.col, letters: c.colLetters };
   }
   const dataStartRow = headerRow.rowNum + 2;
+
+  // 中文表头兜底：模板里字段编码可能改过（例如项目中心换了编码），
+  // 这里把表头行上方的中文（如「项目中心」）也映射到列，作为第二重匹配
+  const labelCols = {};
+  for (const r of picked.rows) {
+    if (r.rowNum >= headerRow.rowNum) continue;
+    for (const c of r.cells) {
+      const t = normLabel(cellText(c, sst));
+      if (!t) continue;
+      if (/^F[A-Za-z0-9_#]*$/.test(t)) continue;
+      if (!labelCols[t]) labelCols[t] = { col: c.col, letters: c.colLetters };
+    }
+  }
+
   return {
     zip, sst, sheetName: picked.name, sheetPath: picked.path,
-    headerRow: headerRow.rowNum, dataStartRow, columns,
+    headerRow: headerRow.rowNum, dataStartRow, columns, labelCols,
     rows: picked.rows, xml: picked.xml,
   };
 }
@@ -224,12 +281,19 @@ export async function fillTemplate(buffer, dataRows, opts = {}) {
   if (!Object.keys(colMap).length) throw new Error('模板字段不匹配，无法填充');
 
   // 公式列：写入缓存值，保证不重算的读取端也能看到编码/金额
-  const fcol = (code) => (info.columns[code] ? info.columns[code].col : null);
+  const fcol = (code, ...alias) => {
+    for (const cd of [code, ...alias]) if (info.columns[cd]) return info.columns[cd].col;
+    for (const cd of [code, ...alias]) {
+      const k = Object.keys(info.columns).find((x) => x.startsWith(cd));
+      if (k) return info.columns[k].col;
+    }
+    return null;
+  };
   const formulaCols = {
     costCode: fcol('FExpID'),
     travelCode: fcol('FTravelType'),
     deptCode: fcol('FExpenseDeptEntryID'),
-    projectCode: fcol('F_DH_Project'),
+    projectCode: fcol('F_DH_Project', 'FProjectID', 'FExpProject', 'FExpenseProject', 'FProjectEntryID'),
     applyAmt: fcol('FExpenseAmount'),
     submitAmt: fcol('FTaxSubmitAmt'),
   };
@@ -463,4 +527,72 @@ export async function buildSimpleWorkbook(rows, { traveler = '' } = {}) {
 </Relationships>`);
   zip.file('xl/worksheets/sheet1.xml', simpleSheetXml(rows));
   return zip.generateAsync({ type: 'blob', mimeType: XLSX_MIME, compression: 'DEFLATE' });
+}
+
+/**
+ * 从模板里读「项目中心」列表
+ * 金蝶模板第 3 个工作表叫「项目中心」：A 列是编码，B 列是名称
+ * @returns {Promise<Array<{name:string, code:string}>>}
+ */
+export async function readProjectSheet(buffer) {
+  const list = await readListSheet(buffer, /项目中心/);
+  if (list.length) return list;
+  // 兜底：有些模板把项目中心放在别的表里，按「编码-名称」两列再扫一遍
+  return [];
+}
+
+/** 通用：按工作表名匹配，返回 [{name, code}] */
+export async function readListSheet(buffer, nameRe) {
+  const zip = await JSZip.loadAsync(buffer);
+  const wbXml = await zip.file('xl/workbook.xml').async('string');
+  const relsXml = await zip.file('xl/_rels/workbook.xml.rels').async('string');
+  const rels = {};
+  {
+    const re = /<Relationship\b([^>]*)\/>/g;
+    let m;
+    while ((m = re.exec(relsXml))) {
+      const id = (m[1].match(/Id="([^"]+)"/) || [])[1];
+      const target = (m[1].match(/Target="([^"]+)"/) || [])[1];
+      if (id && target) rels[id] = target.replace(/^\/?xl\//, '').replace(/^\//, '');
+    }
+  }
+  const sheets = [];
+  {
+    const re = /<sheet\b([^>]*)\/>/g;
+    let m;
+    while ((m = re.exec(wbXml))) {
+      const name = (m[1].match(/name="([^"]*)"/) || [])[1];
+      const rid = (m[1].match(/r:id="([^"]+)"/) || [])[1];
+      if (name && rid && rels[rid]) sheets.push({ name: unxml(name), path: 'xl/' + rels[rid] });
+    }
+  }
+  const pick = sheets.find((s) => nameRe.test(s.name));
+  if (!pick) return [];
+  const f = zip.file(pick.path);
+  if (!f) return [];
+  const xml = await f.async('string');
+  const sstXml = zip.file('xl/sharedStrings.xml') ? await zip.file('xl/sharedStrings.xml').async('string') : '';
+  const sst = parseSharedStrings(sstXml);
+  const rows = parseRows(xml);
+
+  const out = [];
+  const seen = new Set();
+  for (const r of rows) {
+    const texts = r.cells
+      .slice()
+      .sort((a, b) => a.col - b.col)
+      .map((c) => cellText(c, sst).trim());
+    if (!texts.length) continue;
+    // A 列编码、B 列名称；只有一列时把那一列当名称
+    let code = texts[0] || '';
+    let name = texts[1] || '';
+    if (!name) { name = code; code = ''; }
+    if (!name) continue;
+    if (/^(项目中心|名称|编码|项目|项目编码|项目名称)$/.test(name)) continue; // 表头
+    if (/^#N\/A$/i.test(name) || /^#N\/A$/i.test(code)) continue;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    out.push({ name, code });
+  }
+  return out;
 }

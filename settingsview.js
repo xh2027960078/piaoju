@@ -5,7 +5,7 @@ import { esc, icon, toast, confirmSheet, progressModal, fmtBytes } from '../ui.j
 import { pickOption } from '../picker.js';
 import { repo } from '../db.js';
 import { rerender } from '../render.js';
-import { inspectTemplate } from '../xlsx.js';
+import { inspectTemplate, templateReport, readProjectSheet } from '../xlsx.js';
 import { pickFiles, saveBlob, toArrayBuffer } from '../platform.js';
 import { THEMES, CHART_TOGGLES, applyAppearance, readWallpaper } from '../appearance.js';
 import { isWeChat } from '../env.js';
@@ -106,6 +106,9 @@ export async function renderSettings(root) {
           <div class="file-meta">${tplInfo && tplInfo.ok
             ? `工作表 ${esc(tplInfo.sheetName)} · 表头第 ${tplInfo.headerRow} 行 · 数据从第 ${tplInfo.dataStartRow} 行起`
             : (tplInfo ? '模板解析失败：' + esc(tplInfo.error) : '导入金蝶《员工报销单》模板后可一键生成')}</div>
+          ${tplInfo && tplInfo.ok && tplInfo.report ? `<div class="file-meta" style="margin-top:2px;color:var(--text-2)">
+            已识别 ${tplInfo.report.matched.length}/${tplInfo.report.total} 个字段${tplInfo.report.missing.length ? ` · <span style="color:var(--accent)">缺：${esc(tplInfo.report.missing.join('、'))}</span>` : ''}${tplInfo.projectCount ? ` · 项目中心 ${tplInfo.projectCount} 项` : ''}
+          </div>` : ''}
         </div>
       </div>
       <div class="btn-row">
@@ -269,7 +272,12 @@ async function importTemplate() {
     await repo.set('template', { name: file.name, importedAt: Date.now(), data: buf });
     state.template = { name: file.name, data: buf };
     const info = await inspectTemplate(buf);
-    state.templateInfo = { ...info, ok: true };
+    state.templateInfo = { ...info, ok: true, report: templateReport(info) };
+    try {
+      const projects = await readProjectSheet(buf);
+      state.templateProjects = projects;
+      state.templateInfo.projectCount = projects.length;
+    } catch (e) { /* 模板没有项目表就忽略 */ }
     toast('模板已导入', 'ok');
     rerender();
   } catch (e) {
@@ -289,7 +297,12 @@ async function resetTemplate() {
     const info = await inspectTemplate(buf);
     await repo.set('template', { name: '金蝶员工报销表单（内置）', importedAt: Date.now(), data: buf });
     state.template = { name: '金蝶员工报销表单（内置）', data: buf };
-    state.templateInfo = { ...info, ok: true };
+    state.templateInfo = { ...info, ok: true, report: templateReport(info) };
+    try {
+      const projects = await readProjectSheet(buf);
+      state.templateProjects = projects;
+      state.templateInfo.projectCount = projects.length;
+    } catch (e) { /* 模板没有项目表就忽略 */ }
     toast('已恢复内置模板', 'ok');
     rerender();
   } catch (e) {

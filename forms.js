@@ -12,12 +12,24 @@ import { stayDays } from './lodging.js';
 
 const OPTIONS = window.OPTIONS || { costItems: [], travelTypes: [], invoiceTypes: [], departments: [], projects: [], orgs: [] };
 
+/** 项目中心选项：模板里的「项目中心」工作表优先（更新更全），再并上内置列表 */
+function projectOptions() {
+  const fromTemplate = (state && state.templateProjects) || [];
+  const base = OPTIONS.projects || [];
+  if (!fromTemplate.length) return base;
+  const seen = new Set(fromTemplate.map((x) => x.name));
+  return [
+    ...fromTemplate.map((x) => ({ name: x.name, code: x.code })),
+    ...base.filter((x) => !seen.has(x.name)),
+  ];
+}
+
 const LISTS = {
   costItem: { label: '费用项目', list: () => OPTIONS.costItems },
   travelType: { label: '差旅费类型', list: () => OPTIONS.travelTypes },
   invoiceType: { label: '发票类型', list: () => OPTIONS.invoiceTypes },
   dept: { label: '费用承担部门', list: () => OPTIONS.departments },
-  project: { label: '项目中心', list: () => OPTIONS.projects },
+  project: { label: '项目中心', list: projectOptions },
   org: { label: '申请组织', list: () => OPTIONS.orgs },
 };
 

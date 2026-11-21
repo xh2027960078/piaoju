@@ -1,8 +1,8 @@
 {
-    "versionCode":  135,
-    "versionName":  "1.8.4",
-    "url":  "https://pihrlxposrvbifachezg.supabase.co/storage/v1/object/public/app/piaoju-1.8.4.apk",
+    "versionCode":  138,
+    "versionName":  "1.8.7",
+    "url":  "https://pihrlxposrvbifachezg.supabase.co/storage/v1/object/public/app/piaoju-1.8.7.apk",
     "size":  27194810,
-    "notes":  "1. 汇总比较范围新加「近一周」；近一年横轴月份不再挤在一起\n2. 修复：近一周/近一月柱状图看不到住宿费（住宿按天分摊后计入各桶）\n3. 首页合计挪到标题下方，并显示已报销/未报销拆分；底部合计条移除",
+    "notes":  "1. 导入模板时自动读取模板里的「项目中心」工作表（你的模板有 4993 项，含青海西宁申通环线）\n2. 项目中心选择器优先用模板里的列表，再并上内置 4835 项\n3. 选择器支持手动输入（列表里没有的也能直接填）\n4. 设置页模板卡片显示「项目中心 N 项」",
     "force":  false
 }

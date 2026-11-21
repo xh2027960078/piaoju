@@ -3,7 +3,7 @@
 import { repo } from './db.js';
 import { dailyAmounts } from './lodging.js';
 import { DEFAULT_CHARTS } from './appearance.js';
-import { inspectTemplate } from './xlsx.js';
+import { inspectTemplate, templateReport, readProjectSheet } from './xlsx.js';
 
 
 export const DEFAULT_SETTINGS = {
@@ -24,6 +24,7 @@ export const state = {
   settings: { ...DEFAULT_SETTINGS, charts: { ...DEFAULT_CHARTS } },
   template: null,      // { name, importedAt, data: ArrayBuffer }
   templateInfo: null,  // { sheetName, columns }
+  templateProjects: [],  // 模板「项目中心」工作表里的项目列表 [{name,code}]
   loaded: false,
   tab: 'periods',
   screen: 'tabs',
@@ -50,6 +51,17 @@ export async function loadSettings() {
     try {
       state.templateInfo = await inspectTemplate(tpl.data);
       state.templateInfo.ok = true;
+      state.templateInfo.report = templateReport(state.templateInfo);
+      // 模板自带「项目中心」工作表（通常 5000 项，比内置列表新）：
+      // 后台解析，不阻塞启动；解析完选择器就能搜到新项目
+      readProjectSheet(tpl.data)
+        .then((list) => {
+          if (list && list.length) {
+            state.templateProjects = list;
+            state.templateInfo.projectCount = list.length;
+          }
+        })
+        .catch(() => { /* 模板里没有项目表就忽略 */ });
     } catch (e) {
       state.templateInfo = { ok: false, error: e.message };
     }
@@ -239,18 +251,21 @@ export function bucketsFor(span = 'm6') {
 /** 把票据日期放进对应的桶 */
 function bucketIndex(buckets, span, d) {
   if (!d) return -1;
-  if (span === 'm1') {
-    for (let i = 0; i < buckets.length; i++) {
-      const b = buckets[i];
-      if (d >= b.from && d <= b.to) return i;
+  const day = d.slice(0, 10);
+  for (let i = 0; i < buckets.length; i++) {
+    const b = buckets[i];
+    if (b.from && b.to) {
+      // 按天的范围（近一周：from === to；近1月：5 天一段）
+      if (day >= b.from && day <= b.to) return i;
+    } else if (b.year) {
+      // 按年（近5年）
+      if (day.slice(0, 4) === b.year) return i;
+    } else if (b.key && b.key.length === 7) {
+      // 按月（近半年 / 近一年）
+      if (day.slice(0, 7) === b.key) return i;
     }
-    return -1;
   }
-  if (span === 'y5') {
-    const y = d.slice(0, 4);
-    return buckets.findIndex((b) => b.year === y);
-  }
-  return buckets.findIndex((b) => b.key === d.slice(0, 7));
+  return -1;
 }
 
 export function chartData(span = 'm6') {
@@ -261,14 +276,17 @@ export function chartData(span = 'm6') {
   const byType = new Map();
   const byPeriod = new Map();
 
+  // 柱状图按「每日金额」聚合：住宿费会分摊到入住期间的每一天，
+  // 否则一张住宿票只会算在票据日期那一天，近一周/近一月就看不到
+  const dayMap = dailyAmounts(state.files).map;
+  for (const [d, v] of dayMap) {
+    const mi = bucketIndex(buckets, span, d.slice(0, 10));
+    if (mi >= 0) byMonth[mi].value += v;
+  }
+
   for (const f of state.files) {
     if (f.kind !== 'invoice') continue;
     const amt = Number(f.meta && f.meta.amount) || 0;
-    const d = dateOfFile(f);
-    if (d) {
-      const mi = bucketIndex(buckets, span, d.slice(0, 10));
-      if (mi >= 0) byMonth[mi].value += amt;
-    }
     const item = (f.meta && f.meta.costItem) || '未分类';
     byItem.set(item, (byItem.get(item) || 0) + amt);
     const type = (f.meta && f.meta.invoiceType) || '未填写';

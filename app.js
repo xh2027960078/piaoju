@@ -92,17 +92,15 @@ function renderTopbar() {
   pageTitle.textContent = t.title;
   let sub = t.sub;
   if (state.tab === 'home' && (state.homeSeg || 'periods') === 'periods') {
-    const tot = totals();
     if (!state.periods.length) {
       pageSub.textContent = '按出差周期整理票据，报销不再漏单';
       sub = null;
     } else {
       const tp = totalsByPaid();
-      // 合计放在顶部：一行总数 + 一行已报销/未报销拆分
-      pageSub.innerHTML = `<span class="sub-line">${tot.periods} 个周期 · ${tot.invoices} 张票据 · 合计 ¥${money(tot.amount, false)}</span>`
-        + `<span class="sub-line sub-sum">`
-        + `<i class="dot ok"></i>已报销 ¥${money(tp.paid, false)}<small>${tp.paidCount} 个</small>`
-        + `<i class="dot gray"></i>未报销 ¥${money(tp.unpaid, false)}<small>${tp.unpaidCount} 个</small>`
+      // 顶部只保留已报销 / 未报销金额，不显示合计和周期数量
+      pageSub.innerHTML = `<span class="sub-sum">`
+        + `<i class="dot ok"></i>已报销 ¥${money(tp.paid, false)}`
+        + `<i class="dot gray"></i>未报销 ¥${money(tp.unpaid, false)}`
         + `</span>`;
       sub = null;
     }
